@@ -74,14 +74,36 @@ def fetch_prices_bulk(tickers: List[str]) -> Dict[str, float]:
 
     return prices
 
-def compute_holdings(df: pd.DataFrame, prices: Dict[str, float]) -> pd.DataFrame:
-    df = _normalize_holdings(df)
-    df["Live Price"] = df["Ticker"].map(prices)
-    df["Cost Basis"] = (df["Shares"] * df["Avg Cost"]).round(2)
-    df["Market Value"] = (df["Shares"] * df["Live Price"]).round(2)
-    df["P/L $"] = (df["Market Value"] - df["Cost Basis"]).round(2)
-    with pd.option_context("mode.use_inf_as_na", True):
-        df["P/L %"] = (df["P/L $"] / df["Cost Basis"] * 100).fillna(0.0).round(2)
+def compute_holdings(df: pd.DataFrame, prices: dict) -> pd.DataFrame:
+    # Ensure expected columns exist and clean them
+    df = df.copy()
+    expected = ["Ticker", "Shares", "Avg Cost"]
+    for col in expected:
+        if col not in df.columns:
+            df[col] = pd.NA
+
+    # Normalize text & numbers
+    df["Ticker"] = df["Ticker"].astype(str).str.upper().str.strip()
+    df["Shares"] = pd.to_numeric(df["Shares"], errors="coerce").fillna(0.0)
+    df["Avg Cost"] = pd.to_numeric(df["Avg Cost"], errors="coerce").fillna(0.0)
+
+    # Map live prices and coerce to float
+    df["Live Price"] = pd.to_numeric(df["Ticker"].map(prices), errors="coerce")
+
+    # >>> ALL numeric before math to avoid object dtype <<<
+    shares = df["Shares"].astype(float)
+    avg_cost = df["Avg Cost"].astype(float)
+    live = df["Live Price"].astype(float)
+
+    df["Cost Basis"]   = (shares * avg_cost).round(2)
+    df["Market Value"] = (shares * live).round(2)
+    df["P/L $"]        = (df["Market Value"] - df["Cost Basis"]).round(2)
+
+    # Avoid divide-by-zero and NaNs
+    with np.errstate(divide="ignore", invalid="ignore"):
+        pl_pct = np.where(df["Cost Basis"] > 0, (df["P/L $"] / df["Cost Basis"]) * 100.0, 0.0)
+    df["P/L %"] = np.round(np.nan_to_num(pl_pct, nan=0.0, posinf=0.0, neginf=0.0), 2)
+
     order = ["Ticker", "Shares", "Avg Cost", "Live Price", "Cost Basis", "Market Value", "P/L $", "P/L %"]
     return df[order]
 
