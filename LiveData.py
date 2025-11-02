@@ -122,14 +122,11 @@ def money(x):
 # Session State / Defaults
 # =========================
 DEFAULT = {
-    "Long-Term (USD)": pd.DataFrame([
-        {"Ticker": "QQQ", "Shares": 10, "Avg Cost": 420.0},
-        {"Ticker": "NVDA", "Shares": 2, "Avg Cost": 950.0},
-        {"Ticker": "BTC-USD", "Shares": 0.05, "Avg Cost": 60000.0},
+    "Portfolio A - Active Trading": pd.DataFrame([
+        {"Ticker": "QQQ", "Shares": 0, "Avg Cost": 0.0},
     ]),
-    "TFSA (CAD)": pd.DataFrame([
-        {"Ticker": "AAPL", "Shares": 5, "Avg Cost": 180.0},
-        {"Ticker": "TSLA", "Shares": 2, "Avg Cost": 210.0},
+    "Portfolio B - Passive/Long Term": pd.DataFrame([
+        {"Ticker": "HHIS.TO", "Shares": 120, "Avg Cost": 13.56},
     ]),
 }
 DEFAULT_WATCHLIST = pd.DataFrame(
