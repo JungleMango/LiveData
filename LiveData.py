@@ -49,9 +49,8 @@ def format_money(x):
 # ---------- Session State ----------
 DEFAULT_ROWS = pd.DataFrame(
     [
-        {"Ticker": "QQQ", "Shares": 10, "Avg Cost": 420.00},
+        {"Ticker": "HHIS.TO", "Shares": 120, "Avg Cost": 13.56},
         {"Ticker": "NVDA", "Shares": 2, "Avg Cost": 950.00},
-        {"Ticker": "BTC-USD", "Shares": 0.05, "Avg Cost": 60000.00},
     ]
 )
 
@@ -82,7 +81,7 @@ csv_bytes = st.session_state["portfolio"].to_csv(index=False).encode("utf-8")
 st.sidebar.download_button("⬇️ Download CSV", data=csv_bytes, file_name="portfolio.csv", mime="text/csv")
 
 # ---------- Title & Help ----------
-st.title("📊 Live Portfolio Dashboard")
+st.title("Live Portfolio Dashboard")
 st.caption("Edit the table to add/remove holdings. Click **Refresh Prices** to update live quotes. (Prices cached ~60s)")
 
 # ---------- Editable Table ----------
