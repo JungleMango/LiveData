@@ -208,7 +208,7 @@ prices = fetch_prices_bulk(all_tickers)  # cached 60s
 # =========================
 # 1) Summary table (top)
 # =========================
-colored_title("Portfolio Summary","#1db954",36)
+colored_title("All Portfolios","#1db954",36)
 summary_rows = []
 for name, df in st.session_state["portfolios"].items():
     calc = compute_holdings(df, prices)
@@ -232,9 +232,9 @@ st.dataframe(
 # =========================
 # 2) Per-portfolio breakdown (editable)
 # =========================
-st.markdown("### Portfolio Holdings (Editable)")
+colored_title("Portfolio Breakdown","#1db954",36)
 for name in sorted(st.session_state["portfolios"].keys()):
-    st.markdown(f"#### {name}")
+    st.markdown(f"##### {name}")
     # Editable table
     edited = st.data_editor(
         _normalize_holdings(st.session_state["portfolios"][name]),
