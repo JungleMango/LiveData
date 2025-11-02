@@ -1,129 +1,235 @@
-import streamlit as st
+# multi_portfolio_dashboard.py
+import json
+from pathlib import Path
+from typing import Dict, List
+
 import pandas as pd
+import streamlit as st
 import yfinance as yf
-from datetime import timezone
 
-st.set_page_config(page_title="Portfolio Dashboard", page_icon="📊", layout="wide")
+st.set_page_config(page_title="Multi-Portfolio Dashboard", page_icon="📊", layout="wide")
+st.title("📊 Multi-Portfolio Dashboard")
 
-# ---------- Helpers ----------
+# =========================
+# Helpers
+# =========================
+DATA_FILE = Path("portfolios.json")
+
+def _normalize_holdings(df: pd.DataFrame) -> pd.DataFrame:
+    if df is None or df.empty:
+        return pd.DataFrame(columns=["Ticker", "Shares", "Avg Cost"])
+    out = df.copy()
+    for col in ["Ticker", "Shares", "Avg Cost"]:
+        if col not in out.columns:
+            out[col] = pd.NA
+    out["Ticker"] = out["Ticker"].astype(str).str.upper().str.strip()
+    out["Shares"] = pd.to_numeric(out["Shares"], errors="coerce").fillna(0.0)
+    out["Avg Cost"] = pd.to_numeric(out["Avg Cost"], errors="coerce").fillna(0.0)
+    return out[["Ticker", "Shares", "Avg Cost"]]
+
 @st.cache_data(ttl=60)
-def fetch_prices(tickers: list[str]) -> dict:
-    """Return last close/price for each ticker; ignores empties & failures."""
-    prices = {}
-    for t in tickers:
-        t = t.strip().upper()
-        if not t:
-            continue
+def fetch_prices_bulk(tickers: List[str]) -> Dict[str, float]:
+    """Fetch latest price per ticker (close of last bar)."""
+    tickers = sorted({t.strip().upper() for t in tickers if t and isinstance(t, str)})
+    prices: Dict[str, float] = {}
+    if not tickers:
+        return prices
+
+    # Try 1-minute intraday for today; fallback to daily
+    try:
+        df = yf.download(tickers=tickers, period="1d", interval="1m", group_by="ticker", progress=False, threads=True)
+        if isinstance(df.columns, pd.MultiIndex):
+            for t in tickers:
+                try:
+                    close_series = df[(t, "Close")].dropna()
+                    if not close_series.empty:
+                        prices[t] = float(close_series.iloc[-1])
+                except Exception:
+                    pass
+        else:
+            # Single ticker
+            if "Close" in df.columns and not df["Close"].empty:
+                prices[tickers[0]] = float(df["Close"].iloc[-1])
+    except Exception:
+        pass
+
+    # Fallback: daily
+    missing = [t for t in tickers if t not in prices]
+    if missing:
         try:
-            hist = yf.Ticker(t).history(period="1d", interval="1m")
-            if hist is None or hist.empty:
-                # fallback to daily if intraday missing
-                hist = yf.Ticker(t).history(period="5d", interval="1d")
-            if hist is not None and not hist.empty:
-                prices[t] = float(hist["Close"].iloc[-1])
+            df = yf.download(tickers=missing, period="5d", interval="1d", group_by="ticker", progress=False, threads=True)
+            if isinstance(df.columns, pd.MultiIndex):
+                for t in missing:
+                    try:
+                        close_series = df[(t, "Close")].dropna()
+                        if not close_series.empty:
+                            prices[t] = float(close_series.iloc[-1])
+                    except Exception:
+                        pass
+            else:
+                if "Close" in df.columns and not df["Close"].empty:
+                    prices[missing[0]] = float(df["Close"].iloc[-1])
         except Exception:
             pass
+
     return prices
 
-def compute_pnl(df: pd.DataFrame, prices: dict, base_currency: str = "USD") -> pd.DataFrame:
-    df = df.copy()
-    df["Ticker"] = df["Ticker"].str.upper().str.strip()
-    df["Shares"] = pd.to_numeric(df["Shares"], errors="coerce").fillna(0.0)
-    df["Avg Cost"] = pd.to_numeric(df["Avg Cost"], errors="coerce").fillna(0.0)
-
-    df["Live Price"] = df["Ticker"].map(prices).fillna(pd.NA)
+def compute_holdings(df: pd.DataFrame, prices: Dict[str, float]) -> pd.DataFrame:
+    df = _normalize_holdings(df)
+    df["Live Price"] = df["Ticker"].map(prices)
     df["Cost Basis"] = (df["Shares"] * df["Avg Cost"]).round(2)
     df["Market Value"] = (df["Shares"] * df["Live Price"]).round(2)
-
-    # P/L
     df["P/L $"] = (df["Market Value"] - df["Cost Basis"]).round(2)
-    df["P/L %"] = ((df["P/L $"] / df["Cost Basis"]) * 100).replace([pd.NA, pd.NaT, float("inf"), -float("inf")], 0).round(2)
+    with pd.option_context("mode.use_inf_as_na", True):
+        df["P/L %"] = (df["P/L $"] / df["Cost Basis"] * 100).fillna(0.0).round(2)
+    order = ["Ticker", "Shares", "Avg Cost", "Live Price", "Cost Basis", "Market Value", "P/L $", "P/L %"]
+    return df[order]
 
-    # Order columns nicely
-    cols = ["Ticker", "Shares", "Avg Cost", "Live Price", "Cost Basis", "Market Value", "P/L $", "P/L %"]
-    return df[cols]
+def portfolio_totals(holdings_calc: pd.DataFrame) -> dict:
+    invested = float(holdings_calc["Cost Basis"].sum(skipna=True))
+    value = float(holdings_calc["Market Value"].sum(skipna=True))
+    pl = float(holdings_calc["P/L $"].sum(skipna=True))
+    growth = (pl / invested * 100) if invested else 0.0
+    return {"Invested": invested, "Value": value, "P/L $": pl, "P/L %": round(growth, 2)}
 
-def format_money(x):
+def money(x): 
     return "" if pd.isna(x) else f"${x:,.2f}"
 
-# ---------- Session State ----------
-DEFAULT_ROWS = pd.DataFrame(
-    [
-        {"Ticker": "HHIS.TO", "Shares": 120, "Avg Cost": 13.56},
-        {"Ticker": "NVDA", "Shares": 2, "Avg Cost": 950.00},
-    ]
+# =========================
+# Session State / Defaults
+# =========================
+DEFAULT = {
+    "Long-Term (USD)": pd.DataFrame([
+        {"Ticker": "QQQ", "Shares": 10, "Avg Cost": 420.0},
+        {"Ticker": "NVDA", "Shares": 2, "Avg Cost": 950.0},
+        {"Ticker": "BTC-USD", "Shares": 0.05, "Avg Cost": 60000.0},
+    ]),
+    "TFSA (CAD)": pd.DataFrame([
+        {"Ticker": "AAPL", "Shares": 5, "Avg Cost": 180.0},
+        {"Ticker": "TSLA", "Shares": 2, "Avg Cost": 210.0},
+    ]),
+}
+DEFAULT_WATCHLIST = pd.DataFrame(
+    [{"Ticker": "MSFT"}, {"Ticker": "ETH-USD"}, {"Ticker": "SPY"}]
 )
 
-if "portfolio" not in st.session_state:
-    st.session_state["portfolio"] = DEFAULT_ROWS.copy()
+def load_state():
+    if DATA_FILE.exists():
+        try:
+            blob = json.loads(DATA_FILE.read_text())
+            portfolios = {}
+            for name, rows in blob.get("portfolios", {}).items():
+                portfolios[name] = _normalize_holdings(pd.DataFrame(rows))
+            watch = pd.DataFrame(blob.get("watchlist", []))
+            return portfolios or DEFAULT, (watch if not watch.empty else DEFAULT_WATCHLIST.copy())
+        except Exception:
+            pass
+    return DEFAULT.copy(), DEFAULT_WATCHLIST.copy()
 
-# ---------- Sidebar ----------
-st.sidebar.header("Settings")
-base_currency = st.sidebar.selectbox("Base currency (display only)", ["USD"], index=0)
-refresh = st.sidebar.button("🔄 Refresh Prices")
+if "portfolios" not in st.session_state or "watchlist" not in st.session_state:
+    st.session_state["portfolios"], st.session_state["watchlist"] = load_state()
 
-st.sidebar.markdown("---")
-st.sidebar.caption("💾 **Save / Load** your table")
-uploaded = st.sidebar.file_uploader("Load CSV", type=["csv"])
-if uploaded is not None:
-    try:
-        loaded = pd.read_csv(uploaded)
-        # Minimal schema fix
-        for col in ["Ticker", "Shares", "Avg Cost"]:
-            if col not in loaded.columns:
-                loaded[col] = pd.Series(dtype=float if col != "Ticker" else str)
-        st.session_state["portfolio"] = loaded[["Ticker", "Shares", "Avg Cost"]]
-        st.sidebar.success("Loaded CSV into the editor.")
-    except Exception as e:
-        st.sidebar.error(f"Couldn't load CSV: {e}")
+# =========================
+# Controls
+# =========================
+left, right = st.columns([3, 2])
+with left:
+    st.subheader("Portfolios")
+    # Add/delete portfolios
+    with st.popover("➕ Add Portfolio"):
+        new_name = st.text_input("Portfolio name", value="", placeholder="e.g., Growth (USD)")
+        if st.button("Create"):
+            name = new_name.strip()
+            if name:
+                if name in st.session_state["portfolios"]:
+                    st.warning("A portfolio with that name already exists.")
+                else:
+                    st.session_state["portfolios"][name] = pd.DataFrame(columns=["Ticker", "Shares", "Avg Cost"])
+                    st.success(f"Created: {name}")
+            else:
+                st.error("Please enter a name.")
 
-csv_bytes = st.session_state["portfolio"].to_csv(index=False).encode("utf-8")
-st.sidebar.download_button("⬇️ Download CSV", data=csv_bytes, file_name="portfolio.csv", mime="text/csv")
+with right:
+    st.subheader("Actions")
+    refresh = st.button("🔄 Refresh Prices")
+    if st.button("💾 Save to portfolios.json"):
+        try:
+            blob = {
+                "portfolios": {k: v.to_dict(orient="records") for k, v in st.session_state["portfolios"].items()},
+                "watchlist": st.session_state["watchlist"].to_dict(orient="records"),
+            }
+            DATA_FILE.write_text(json.dumps(blob, indent=2))
+            st.success("Saved.")
+        except Exception as e:
+            st.error(f"Save failed: {e}")
 
-# ---------- Title & Help ----------
-st.title("Live Portfolio Dashboard")
-st.caption("Edit the table to add/remove holdings. Click **Refresh Prices** to update live quotes. (Prices cached ~60s)")
+# =========================
+# Pricing & Calculations
+# =========================
+# Gather all tickers across portfolios + watchlist for one bulk fetch
+all_tickers = []
+for df in st.session_state["portfolios"].values():
+    all_tickers.extend(_normalize_holdings(df)["Ticker"].tolist())
+all_tickers.extend(st.session_state["watchlist"]["Ticker"].astype(str).str.upper().tolist())
+prices = fetch_prices_bulk(all_tickers)  # cached 60s
 
-# ---------- Editable Table ----------
-edited_df = st.data_editor(
-    st.session_state["portfolio"],
-    num_rows="dynamic",
+# =========================
+# 1) Summary table (top)
+# =========================
+st.markdown("### Portfolio Summary")
+summary_rows = []
+for name, df in st.session_state["portfolios"].items():
+    calc = compute_holdings(df, prices)
+    t = portfolio_totals(calc)
+    summary_rows.append({
+        "Portfolio": name,
+        "Invested": t["Invested"],
+        "Market Value": t["Value"],
+        "P/L $": t["P/L $"],
+        "P/L %": t["P/L %"],
+    })
+
+summary_df = pd.DataFrame(summary_rows).sort_values("P/L %", ascending=False, ignore_index=True)
+st.dataframe(
+    summary_df.style.format({
+        "Invested": money, "Market Value": money, "P/L $": money, "P/L %": "{:,.2f}%"
+    }),
     use_container_width=True,
-    column_config={
-        "Ticker": st.column_config.TextColumn(help="e.g., AAPL, NVDA, BTC-USD"),
-        "Shares": st.column_config.NumberColumn(step=1, help="Number of shares/units"),
-        "Avg Cost": st.column_config.NumberColumn(format="%.4f", help="Average cost per share/unit"),
-    },
-    key="portfolio_editor"
 )
 
-# Persist edits
-st.session_state["portfolio"] = edited_df
+# =========================
+# 2) Per-portfolio breakdown (editable)
+# =========================
+st.markdown("### Portfolio Holdings (Editable)")
+for name in sorted(st.session_state["portfolios"].keys()):
+    st.markdown(f"#### {name}")
+    # Editable table
+    edited = st.data_editor(
+        _normalize_holdings(st.session_state["portfolios"][name]),
+        num_rows="dynamic",
+        use_container_width=True,
+        key=f"editor_{name}",
+        column_config={
+            "Ticker": st.column_config.TextColumn(help="e.g., AAPL, NVDA, BTC-USD"),
+            "Shares": st.column_config.NumberColumn(step=1, help="Number of shares/units"),
+            "Avg Cost": st.column_config.NumberColumn(format="%.4f", help="Average cost per share/unit"),
+        },
+    )
+    # Persist edits
+    st.session_state["portfolios"][name] = _normalize_holdings(edited)
 
-# ---------- Price Fetch & Calculations ----------
-tickers = [t for t in edited_df["Ticker"].astype(str).str.upper().str.strip() if t]
-prices = fetch_prices(tickers) if (refresh or True) else {}  # cached anyway
+    # Calculated view
+    calc = compute_holdings(st.session_state["portfolios"][name], prices)
+    tot = portfolio_totals(calc)
 
-calc = compute_pnl(edited_df, prices, base_currency=base_currency)
+    k1, k2, k3, k4 = st.columns(4)
+    k1.metric("Invested", money(tot["Invested"]))
+    k2.metric("Market Value", money(tot["Value"]))
+    k3.metric("P/L $", money(tot["P/L $"]))
+    k4.metric("P/L %", f"{tot['P/L %']:,.2f}%")
 
-# Totals
-total_invested = calc["Cost Basis"].sum(skipna=True)
-total_value = calc["Market Value"].sum(skipna=True)
-total_pl = calc["P/L $"].sum(skipna=True)
-total_pl_pct = (total_pl / total_invested * 100) if total_invested else 0.0
-
-# ---------- KPI Row ----------
-c1, c2, c3, c4 = st.columns(4)
-c1.metric("Total Invested", format_money(total_invested))
-c2.metric("Market Value", format_money(total_value))
-c3.metric("P/L $", format_money(total_pl), delta=None)
-c4.metric("P/L %", f"{total_pl_pct:,.2f}%")
-
-# ---------- Results Table ----------
-st.subheader("Holdings")
-styled = (
-    calc.style.format(
-        {
+    st.dataframe(
+        calc.style.format({
             "Shares": "{:,.4f}",
             "Avg Cost": "${:,.4f}",
             "Live Price": "${:,.4f}",
@@ -131,20 +237,67 @@ styled = (
             "Market Value": "${:,.2f}",
             "P/L $": "${:,.2f}",
             "P/L %": "{:,.2f}%",
-        }
+        }),
+        use_container_width=True,
     )
-    .bar(subset=["P/L $"], color=["#f87171"], vmin=calc["P/L $"].min(), vmax=calc["P/L $"].max())  # red/green auto by range
-    .hide(axis="index")
+    st.divider()
+
+# =========================
+# 3) Watchlist
+# =========================
+st.markdown("### Watchlist (Editable)")
+watch_edited = st.data_editor(
+    st.session_state["watchlist"],
+    num_rows="dynamic",
+    use_container_width=True,
+    key="watchlist_editor",
+    column_config={
+        "Ticker": st.column_config.TextColumn(help="Any Yahoo Finance symbol, e.g., MSFT, ETH-USD, XAUUSD=X"),
+    },
 )
-st.dataframe(calc, use_container_width=True)
+st.session_state["watchlist"] = watch_edited
 
-# Optional: show styled as HTML (better bars), uncomment if you prefer:
-# st.write(styled.to_html(), unsafe_allow_html=True)
+# Build watchlist table with prices and day change if available
+watch = st.session_state["watchlist"].copy()
+watch["Ticker"] = watch["Ticker"].astype(str).str.upper().str.strip()
+watch["Live Price"] = watch["Ticker"].map(prices)
 
-st.caption("Tip: Add tickers like `BTC-USD` (Bitcoin), `ETH-USD` (Ethereum), US stocks (e.g., `AAPL`), ETFs (e.g., `QQQ`).")
+# Optional: get day % change via daily OHLC (small extra call; cached by fetch_prices_bulk for price only)
+@st.cache_data(ttl=60)
+def day_change(tickers: List[str]) -> pd.DataFrame:
+    if not tickers:
+        return pd.DataFrame(columns=["Ticker", "Change %"])
+    try:
+        df = yf.download(tickers=tickers, period="5d", interval="1d", group_by="ticker", progress=False, threads=True)
+        rows = []
+        if isinstance(df.columns, pd.MultiIndex):
+            for t in tickers:
+                try:
+                    d = df[t].dropna()
+                    if len(d) >= 2:
+                        prev_close = float(d["Close"].iloc[-2])
+                        last_close = float(d["Close"].iloc[-1])
+                        chg = (last_close / prev_close - 1) * 100 if prev_close else 0.0
+                        rows.append({"Ticker": t, "Change %": round(chg, 2)})
+                except Exception:
+                    pass
+        else:
+            # Single ticker
+            d = df.dropna()
+            if len(d) >= 2:
+                prev_close = float(d["Close"].iloc[-2])
+                last_close = float(d["Close"].iloc[-1])
+                chg = (last_close / prev_close - 1) * 100 if prev_close else 0.0
+                rows.append({"Ticker": tickers[0], "Change %": round(chg, 2)})
+        return pd.DataFrame(rows)
+    except Exception:
+        return pd.DataFrame(columns=["Ticker", "Change %"])
 
-# ---------- Footer ----------
-st.markdown(
-    "<small>Data via Yahoo Finance (`yfinance`). Not investment advice.</small>",
-    unsafe_allow_html=True,
+wl_changes = day_change([t for t in watch["Ticker"] if t])
+watch = watch.merge(wl_changes, on="Ticker", how="left")
+
+st.dataframe(
+    watch.style.format({"Live Price": "${:,.4f}", "Change %": "{:,.2f}%"}),
+    use_container_width=True,
 )
+st.caption("Tip: Symbols can be stocks (AAPL), ETFs (QQQ), crypto (BTC-USD), FX/commodities (e.g., XAUUSD=X).")
