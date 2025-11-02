@@ -193,7 +193,6 @@ def colored_title(text, color="#4CAF50", size=32, emoji=""):
         unsafe_allow_html=True
     )
 
-colored_title("Portfolio Overview", "#1DB954", 36, "📈")
 
 
 # =========================
@@ -210,6 +209,7 @@ prices = fetch_prices_bulk(all_tickers)  # cached 60s
 # 1) Summary table (top)
 # =========================
 st.markdown("### Portfolio Summary")
+colored_title("Portfolio Summary","#1db954",36)
 summary_rows = []
 for name, df in st.session_state["portfolios"].items():
     calc = compute_holdings(df, prices)
