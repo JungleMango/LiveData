@@ -9,7 +9,7 @@ import streamlit as st
 import yfinance as yf
 
 st.set_page_config(page_title="Multi-Portfolio Dashboard", page_icon="📊", layout="wide")
-st.title("📊 Multi-Portfolio Dashboard")
+st.title("Multi-Portfolio Dashboard")
 
 # =========================
 # Helpers
@@ -182,6 +182,19 @@ with right:
             st.success("Saved.")
         except Exception as e:
             st.error(f"Save failed: {e}")
+
+# =========================
+# Colored Titles
+# =========================
+
+def colored_title(text, color="#4CAF50", size=32, emoji=""):
+    st.markdown(
+        f"<h1 style='color:{color}; font-size:{size}px;'>{emoji} {text}</h1>",
+        unsafe_allow_html=True
+    )
+
+colored_title("Portfolio Overview", "#1DB954", 36, "📈")
+
 
 # =========================
 # Pricing & Calculations
