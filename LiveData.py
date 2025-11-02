@@ -208,7 +208,6 @@ prices = fetch_prices_bulk(all_tickers)  # cached 60s
 # =========================
 # 1) Summary table (top)
 # =========================
-st.markdown("### Portfolio Summary")
 colored_title("Portfolio Summary","#1db954",36)
 summary_rows = []
 for name, df in st.session_state["portfolios"].items():
