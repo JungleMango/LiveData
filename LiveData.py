@@ -472,7 +472,7 @@ if not weights_df.empty:
         "x": [0], "y": [0]
     })).mark_text(fontSize=16, fontWeight="bold").encode(text="label:N")
 
-    colored_header_bg("🏋️ Asset Weights", "#111827", "white", 22)
+    colored_header_bg("Portfolio Weightage", "#111827", "white", 22)
     st.altair_chart(donut, use_container_width=True)
 else:
     st.info("Weights are unavailable (no priced holdings).")
@@ -498,7 +498,7 @@ watch["Live Price"] = watch["Ticker"].map(prices)
 @st.cache_data(ttl=60)
 def day_change(tickers: List[str]) -> pd.DataFrame:
     if not tickers:
-        return pd.DataFrame(columns=["Ticker", "Change %"])
+        return pd.DataFrame(columns=["Ticker", "Daily Change %"])
     try:
         df = yf.download(tickers=tickers, period="5d", interval="1d", group_by="ticker", progress=False, threads=True)
         rows = []
@@ -509,7 +509,7 @@ def day_change(tickers: List[str]) -> pd.DataFrame:
                     if len(d) >= 2:
                         prev_close = float(d["Close"].iloc[-2])
                         last_close = float(d["Close"].iloc[-1])
-                        rows.append({"Ticker": t, "Change %": round((last_close/prev_close - 1)*100, 2)})
+                        rows.append({"Ticker": t, "Daily Change %": round((last_close/prev_close - 1)*100, 2)})
                 except Exception:
                     pass
         else:
@@ -517,15 +517,15 @@ def day_change(tickers: List[str]) -> pd.DataFrame:
             if len(d) >= 2:
                 prev_close = float(d["Close"].iloc[-2])
                 last_close = float(d["Close"].iloc[-1])
-                rows.append({"Ticker": tickers[0], "Change %": round((last_close/prev_close - 1)*100, 2)})
+                rows.append({"Ticker": tickers[0], "Daily Change %": round((last_close/prev_close - 1)*100, 2)})
         return pd.DataFrame(rows)
     except Exception:
-        return pd.DataFrame(columns=["Ticker", "Change %"])
+        return pd.DataFrame(columns=["Ticker", "Daily Change %"])
 
 wl_changes = day_change([t for t in watch["Ticker"] if t])
 watch = watch.merge(wl_changes, on="Ticker", how="left")
 
 st.dataframe(
-    watch.style.format({"Live Price": "${:,.4f}", "Change %": "{:,.2f}%"}),
+    watch.style.format({"Live Price": "${:,.4f}", "Daily Change %": "{:,.2f}%"}),
     use_container_width=True,
 )
