@@ -223,18 +223,38 @@ st.dataframe(
 
 st.caption("Tip: Click **Open** to jump to that portfolio. The selection is also stored in the URL (?p=...).")
 
-# ---------- 2) “Tabs” selector (radio) ----------
+# ---------- Active portfolio (stable state + deep-link) ----------
+portfolio_names = list(st.session_state["portfolios"].keys())
+
+# 1) Initialize once
+if "active_portfolio" not in st.session_state:
+    st.session_state["active_portfolio"] = portfolio_names[0]
+
+# 2) If URL has ?p=..., adopt it (only if different & valid)
+qp = st.query_params.get("p")
+if qp and qp in portfolio_names and qp != st.session_state["active_portfolio"]:
+    st.session_state["active_portfolio"] = qp
+
+# 3) Radio behaves like tabs; on change, update URL (no other code overwrites it)
+def _on_pick_change():
+    picked = st.session_state["_portfolio_picker"]
+    st.session_state["active_portfolio"] = picked
+    st.query_params.update({"p": picked})  # keep deep-link in sync
+
 colored_header_bg("📂 Portfolios", "#FF6F61", "white", 26)
-active = st.radio(
+picked_index = portfolio_names.index(st.session_state["active_portfolio"])
+st.radio(
     "Select a portfolio",
     options=portfolio_names,
-    index=portfolio_names.index(st.session_state["active_portfolio"]),
+    index=picked_index,
     horizontal=True,
     label_visibility="collapsed",
-    key="active_portfolio",
+    key="_portfolio_picker",
+    on_change=_on_pick_change,
 )
-# keep URL in sync
-st.query_params["p"] = active
+
+active = st.session_state["active_portfolio"]
+
 
 # ---------- 3) Selected portfolio editor + breakdown ----------
 df_edit = st.data_editor(
