@@ -6,6 +6,8 @@ import pandas as pd
 import yfinance as yf
 import streamlit as st
 from urllib.parse import quote, unquote
+import altair as alt
+
 
 st.set_page_config(page_title="Multi-Portfolio (Tabs)", page_icon="📊", layout="wide")
 
@@ -110,6 +112,108 @@ def colored_header_bg(text, bg_color="#0078D7", text_color="white", size=28, ali
         """,
         unsafe_allow_html=True
     )
+# ===== Charts helpers =====
+@st.cache_data(ttl=300)
+def fetch_history_bulk(tickers: list[str], period="6mo", interval="1d") -> dict[str, pd.Series]:
+    """Return dict[ticker] -> Close price series (UTC index) for given period/interval."""
+    tks = sorted({t for t in (tickers or []) if isinstance(t, str) and t.strip()})
+    if not tks:
+        return {}
+    try:
+        df = yf.download(
+            tickers=tks, period=period, interval=interval,
+            group_by="ticker", progress=False, threads=True
+        )
+    except Exception:
+        return {}
+
+    out: dict[str, pd.Series] = {}
+    if isinstance(df.columns, pd.MultiIndex):
+        # Multiple tickers
+        for t in tks:
+            try:
+                s = df[(t, "Close")].dropna()
+                if not s.empty:
+                    out[t] = s
+            except Exception:
+                pass
+    else:
+        # Single ticker
+        if "Close" in df.columns and not df["Close"].empty:
+            out[tks[0]] = df["Close"].dropna()
+
+    return out
+
+def build_portfolio_history(holdings_df: pd.DataFrame, period="6mo", interval="1d") -> tuple[pd.DataFrame, pd.DataFrame]:
+    """
+    Returns:
+      hist_df: DataFrame with columns ["Date","Portfolio Value","Growth %"]
+      weights_df: DataFrame with columns ["Ticker","Market Value"] (latest)
+    Assumes constant share counts over the period (no cash flows modeled).
+    """
+    df = holdings_df.copy()
+    if df is None or df.empty:
+        return (pd.DataFrame(columns=["Date", "Portfolio Value", "Growth %"]),
+                pd.DataFrame(columns=["Ticker", "Market Value"]))
+
+    # Clean & prep
+    df["Ticker"] = df["Ticker"].astype(str).str.upper().str.strip()
+    df["Shares"] = pd.to_numeric(df["Shares"], errors="coerce").fillna(0.0).astype(float)
+
+    tickers = [t for t in df["Ticker"] if t]
+    price_dict = fetch_history_bulk(tickers, period=period, interval=interval)
+
+    if not price_dict:
+        return (pd.DataFrame(columns=["Date", "Portfolio Value", "Growth %"]),
+                pd.DataFrame(columns=["Ticker", "Market Value"]))
+
+    # Align all series by date
+    all_series = []
+    for _, row in df.iterrows():
+        t, sh = row["Ticker"], row["Shares"]
+        if t in price_dict and sh > 0:
+            s = price_dict[t] * sh  # position value over time
+            s.name = t
+            all_series.append(s)
+
+    if not all_series:
+        return (pd.DataFrame(columns=["Date", "Portfolio Value", "Growth %"]),
+                pd.DataFrame(columns=["Ticker", "Market Value"]))
+
+    aligned = pd.concat(all_series, axis=1).fillna(method="ffill").dropna(how="all")
+    aligned["Portfolio Value"] = aligned.sum(axis=1)
+
+    # Growth % from first available total
+    first_val = aligned["Portfolio Value"].dropna().iloc[0]
+    if first_val and first_val > 0:
+        aligned["Growth %"] = (aligned["Portfolio Value"] / first_val - 1.0) * 100.0
+    else:
+        aligned["Growth %"] = 0.0
+
+    hist_df = aligned[["Portfolio Value", "Growth %"]].reset_index()
+    hist_df.rename(columns={"index": "Date"}, inplace=True)
+
+    # Weights = latest point
+    latest_row = aligned.drop(columns=["Portfolio Value", "Growth %"], errors="ignore").iloc[-1]
+    weights_df = latest_row.reset_index()
+    weights_df.columns = ["Ticker", "Market Value"]
+    weights_df = weights_df[weights_df["Market Value"] > 0].sort_values("Market Value", ascending=False)
+
+    return hist_df, weights_df
+
+def format_money_short(x: float) -> str:
+    try:
+        x = float(x)
+    except Exception:
+        return ""
+    if x >= 1_000_000_000:
+        return f"${x/1_000_000_000:.2f}B"
+    if x >= 1_000_000:
+        return f"${x/1_000_000:.2f}M"
+    if x >= 1_000:
+        return f"${x/1_000:.2f}K"
+    return f"${x:,.0f}"
+
 
 # ---------- Defaults / State ----------
 DEFAULT = {
@@ -292,6 +396,87 @@ st.dataframe(
     use_container_width=True,
 )
 st.divider()
+
+# ===== Charts under the selected portfolio =====
+colored_header_bg("📈 Portfolio Charts", "#1E293B", "white", 24, emoji="📊")
+
+# Choose history window
+c_hist1, c_hist2 = st.columns([2, 1])
+with c_hist2:
+    period = st.selectbox("History window", ["1mo", "3mo", "6mo", "1y", "2y", "5y"], index=2)
+    interval = "1d" if period not in ("1mo",) else "60m"  # finer granularity for short window
+
+# Build history using the edited holdings of the ACTIVE portfolio (constant shares)
+hist_df, weights_df = build_portfolio_history(st.session_state["portfolios"][active], period=period, interval=interval)
+
+if hist_df.empty:
+    st.info("No historical data available to chart yet for this portfolio.")
+else:
+    # --- Value line chart ---
+    value_chart = (
+        alt.Chart(hist_df)
+        .mark_line()
+        .encode(
+            x=alt.X("Date:T", title="Date"),
+            y=alt.Y("Portfolio Value:Q", title="Portfolio Value", axis=alt.Axis(format="~s")),
+            tooltip=[
+                alt.Tooltip("Date:T", title="Date"),
+                alt.Tooltip("Portfolio Value:Q", title="Value", format=",.2f"),
+                alt.Tooltip("Growth %:Q", title="Growth %", format=",.2f"),
+            ],
+        )
+        .properties(height=300)
+        .interactive()
+    )
+
+    # --- Growth % line chart ---
+    growth_chart = (
+        alt.Chart(hist_df)
+        .mark_line()
+        .encode(
+            x=alt.X("Date:T", title="Date"),
+            y=alt.Y("Growth %:Q", title="Growth %", axis=alt.Axis(format=",.0f")),
+            tooltip=[
+                alt.Tooltip("Date:T", title="Date"),
+                alt.Tooltip("Growth %:Q", title="Growth %", format=",.2f"),
+                alt.Tooltip("Portfolio Value:Q", title="Value", format=",.2f"),
+            ],
+        )
+        .properties(height=300)
+        .interactive()
+    )
+
+    st.altair_chart(value_chart, use_container_width=True)
+    st.altair_chart(growth_chart, use_container_width=True)
+
+# --- Weights donut ---
+if not weights_df.empty:
+    weights_df["Percent"] = weights_df["Market Value"] / weights_df["Market Value"].sum() * 100.0
+    donut = (
+        alt.Chart(weights_df)
+        .mark_arc(innerRadius=70)  # donut
+        .encode(
+            theta=alt.Theta("Percent:Q"),
+            color=alt.Color("Ticker:N", legend=alt.Legend(title="Ticker")),
+            tooltip=[
+                alt.Tooltip("Ticker:N"),
+                alt.Tooltip("Market Value:Q", title="Value", format=",.2f"),
+                alt.Tooltip("Percent:Q", title="Weight %", format=",.2f"),
+            ],
+        )
+        .properties(height=320)
+    )
+    # Center label with total value
+    center_text = alt.Chart(pd.DataFrame({
+        "label": [format_money_short(hist_df["Portfolio Value"].iloc[-1])],
+        "x": [0], "y": [0]
+    })).mark_text(fontSize=16, fontWeight="bold").encode(text="label:N")
+
+    colored_header_bg("🏋️ Asset Weights", "#111827", "white", 22)
+    st.altair_chart(donut, use_container_width=True)
+else:
+    st.info("Weights are unavailable (no priced holdings).")
+
 
 # ---------- 4) Watchlist ----------
 colored_header_bg("👀 Watchlist", "#8A2BE2", "white", 26)
