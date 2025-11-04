@@ -1,10 +1,5 @@
 import streamlit as st
 
-st.set_page_config(page_title="🌍 Market Overview",
-                   page_icon="📊🌍",
-                   layout="wide",
-                   initial_sidebar_state="expanded")  # ensure nav is visible
-
 
 st.title("🌍 Market Overview")
 st.markdown("Here you can add charts, indices, or macro data.")
