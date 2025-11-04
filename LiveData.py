@@ -10,7 +10,10 @@ import altair as alt
 
 import streamlit as st
 
-
+st.set_page_config(page_title="Multi-Portfolio Dashboard",
+                   page_icon="📊",
+                   layout="wide",
+                   initial_sidebar_state="expanded")  # ensure nav is visible
 
 DATA_FILE = Path("portfolios.json")
 
