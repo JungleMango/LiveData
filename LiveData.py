@@ -16,6 +16,11 @@ st.set_page_config(
 )
 
 
+APP_DIR   = Path(__file__).parent               # absolute dir of this script
+DATA_DIR  = APP_DIR                              # or APP_DIR / "data"
+DATA_FILE = DATA_DIR / "portfolios.json"
+DATA_DIR.mkdir(parents=True, exist_ok=True)      # ensure folder exists
+
 # ⬇️ Temporary “safe boot” so you always see *something* even if later code errors
 st.caption("✅ App booted — rendering helpers… (remove this once stable)")
 
