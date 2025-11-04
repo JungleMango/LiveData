@@ -9,7 +9,12 @@ from urllib.parse import quote, unquote
 import altair as alt
 
 
-st.set_page_config(page_title="Multi-Portfolio (Tabs)", page_icon="📊", layout="wide")
+
+st.set_page_config(page_title="Multi-Portfolio Dashboard",
+                   page_icon="📊",
+                   layout="wide",
+                   initial_sidebar_state="expanded")  # ensure nav is visible
+
 
 DATA_FILE = Path("portfolios.json")
 
