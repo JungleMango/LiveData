@@ -8,15 +8,8 @@ import streamlit as st
 from urllib.parse import quote, unquote
 import altair as alt
 
-import streamlit as st, sys, os, glob
-st.write("**CWD:**", os.getcwd())
-st.write("**Running file:**", sys.argv[0])
-st.write("**Streamlit version:**", st.__version__)
-st.write("**pages/ exists?**", os.path.isdir("pages"))
-st.write("**pages/*.py:**", glob.glob("pages/*.py"))
 
-
-st.set_page_config(page_title="Multi-Portfolio Dashboard",
+st.set_page_config(page_title="Portfolio Dashboard",
                    page_icon="📊",
                    layout="wide",
                    initial_sidebar_state="expanded")  # ensure nav is visible
