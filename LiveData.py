@@ -10,10 +10,6 @@ import altair as alt
 
 import streamlit as st
 
-with st.sidebar:
-    st.header("﹏𓊝﹏ Navigation")
-    st.page_link("LiveData.py",             label="📊 Live Portfolio", icon="💼")
-    st.page_link("pages/MarketOverview.py", label="🌍 Market Overview",  icon="🌎")
 
 
 DATA_FILE = Path("portfolios.json")
