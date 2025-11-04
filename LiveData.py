@@ -14,10 +14,7 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="expanded",
 )
-with st.sidebar:
-    st.header("Navigation")
-    st.page_link("LiveData.py",                 label="📊 Portfolio Dashboard", icon="💼")
-    st.page_link("pages/MarketOverview.py",     label="🌍 Market Overview",     icon="🌎")
+
 
 # ⬇️ Temporary “safe boot” so you always see *something* even if later code errors
 st.caption("✅ App booted — rendering helpers… (remove this once stable)")
