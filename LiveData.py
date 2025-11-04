@@ -4,18 +4,23 @@ from typing import Dict, List
 
 import pandas as pd
 import yfinance as yf
+import altair as alt
 import streamlit as st
 from urllib.parse import quote, unquote
-import altair as alt
 
-import streamlit as st
+st.set_page_config(
+    page_title="Multi-Portfolio Dashboard",
+    page_icon="📊",
+    layout="wide",
+    initial_sidebar_state="expanded",
+)
+with st.sidebar:
+    st.header("Navigation")
+    st.page_link("LiveData.py",                 label="📊 Portfolio Dashboard", icon="💼")
+    st.page_link("pages/MarketOverview.py",     label="🌍 Market Overview",     icon="🌎")
 
-st.set_page_config(page_title="Multi-Portfolio Dashboard",
-                   page_icon="📊",
-                   layout="wide",
-                   initial_sidebar_state="expanded")  # ensure nav is visible
-
-DATA_FILE = Path("portfolios.json")
+# ⬇️ Temporary “safe boot” so you always see *something* even if later code errors
+st.caption("✅ App booted — rendering helpers… (remove this once stable)")
 
 # ---------- Helpers ----------
 def _normalize_holdings(df: pd.DataFrame) -> pd.DataFrame:
