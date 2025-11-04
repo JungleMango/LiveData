@@ -8,6 +8,14 @@ import streamlit as st
 from urllib.parse import quote, unquote
 import altair as alt
 
+import streamlit as st
+
+with st.sidebar:
+    st.header("﹏𓊝﹏ Navigation")
+    st.page_link("LiveData.py",             label="📊 Live Portfolio", icon="💼")
+    st.page_link("pages/MarketOverview.py", label="🌍 Market Overview",  icon="🌎")
+
+
 
 st.set_page_config(page_title="Portfolio Dashboard",
                    page_icon="📊",
