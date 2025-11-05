@@ -91,6 +91,15 @@ def colored_header_bg(title: str, bg_color: str, text_color: str = "white", font
         """,
         unsafe_allow_html=True
     )
+def _normalize_watch_df(df: pd.DataFrame) -> pd.DataFrame:
+    out = pd.DataFrame({"Ticker": df.get("Ticker", pd.Series([], dtype=str))})
+    out["Ticker"] = out["Ticker"].astype(str).str.upper().str.strip()
+    out = out[out["Ticker"] != ""]
+    return out[["Ticker"]]
+
+def _signature(df: pd.DataFrame) -> int:
+    tickers = df["Ticker"].tolist() if "Ticker" in df.columns else []
+    return hash(tuple(tickers))
 
 # ---------- Bootstrap watchlist from Sheets on first session ----------
 if "watchlist" not in st.session_state:
