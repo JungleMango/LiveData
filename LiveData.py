@@ -1,19 +1,17 @@
 # LiveData.py
 import json
-import re 
-from pathlib import Path
+import re
 from typing import Dict, List
 
 import pandas as pd
 import yfinance as yf
-import altair as alt
 import streamlit as st
-from urllib.parse import quote, unquote
 import gspread
 from google.oauth2 import service_account
 
-
-# ---------- Page config ----------
+# ============================
+#          CONFIG
+# ============================
 st.set_page_config(
     page_title="Multi-Portfolio Dashboard",
     page_icon="📊",
@@ -21,108 +19,11 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
-# ---------- UI helpers ----------
-@st.cache_resource
-def fetch_latest_prices(tickers):
-    """Fetch the most recent closing price for a list of tickers."""
-    prices = {}
-    if not tickers:
-        return prices
+SHEET_TAB_NAME = "Watchlist"  # worksheet name inside your Google Sheet
 
-    for t in tickers:
-        try:
-            data = yf.Ticker(t).history(period="1d")
-            if not data.empty:
-                prices[t] = float(data["Close"].iloc[-1])
-            else:
-                prices[t] = None
-        except Exception as e:
-            prices[t] = None
-            print(f"Error fetching {t}: {e}")
-
-    return prices
-
-def day_change(tickers):
-    """Return daily % change for each ticker."""
-    import pandas as pd
-    if not tickers:
-        return pd.DataFrame(columns=["Ticker", "Daily Change %"])
-    try:
-        df = yf.download(tickers=tickers, period="5d", interval="1d",
-                         group_by="ticker", progress=False, threads=True, auto_adjust=False)
-        rows = []
-        if isinstance(df.columns, pd.MultiIndex):
-            for t in tickers:
-                try:
-                    d = df[t].dropna()
-                    if len(d) >= 2:
-                        prev_close = float(d["Close"].iloc[-2])
-                        last_close = float(d["Close"].iloc[-1])
-                        change = round((last_close / prev_close - 1) * 100, 2)
-                        rows.append({"Ticker": t, "Daily Change %": change})
-                except Exception:
-                    pass
-        else:
-            d = df.dropna()
-            if len(d) >= 2:
-                prev_close = float(d["Close"].iloc[-2])
-                last_close = float(d["Close"].iloc[-1])
-                change = round((last_close / prev_close - 1) * 100, 2)
-                rows.append({"Ticker": tickers[0], "Daily Change %": change})
-        return pd.DataFrame(rows)
-    except Exception:
-        return pd.DataFrame(columns=["Ticker", "Daily Change %"])
-
-def _assert_sheets_secrets():
-    if "sheets" not in st.secrets:
-        st.error("Missing [sheets] in secrets.")
-        st.stop()
-    s = st.secrets["sheets"]
-    for k in ("sheet_id", "service_account"):
-        if k not in s:
-            st.error(f"Missing key in [sheets]: {k}")
-            st.stop()
-
-@st.cache_resource
-def get_sheet_client():
-    _assert_sheets_secrets()
-    raw = st.secrets["sheets"]["service_account"]
-
-    # Accept dict or JSON string
-    if isinstance(raw, dict):
-        info = raw
-    else:
-        # If the private_key contains real newlines, convert them to \\n
-        def _escape_pk_newlines(s: str) -> str:
-            # Replace ONLY inside the "private_key": " ... " field
-            return re.sub(
-                r'("private_key"\s*:\s*")([^"]+?)(")',
-                lambda m: m.group(1) + m.group(2).replace("\n", "\\n") + m.group(3),
-                s,
-                flags=re.S,
-            )
-
-        fixed = _escape_pk_newlines(raw)
-        info = json.loads(fixed)
-
-    creds = service_account.Credentials.from_service_account_info(
-        info, scopes=["https://www.googleapis.com/auth/spreadsheets"]
-    )
-    return gspread.authorize(creds)
-
-def save_watchlist_to_sheet(df: pd.DataFrame):
-    client = get_sheet_client()
-    sheet = client.open_by_key(st.secrets["sheets"]["sheet_id"]).sheet1
-    sheet.clear()
-    sheet.update([df.columns.values.tolist()] + df.values.tolist())
-    st.success("✅ Watchlist saved to Google Sheets!")
-
-def load_watchlist_from_sheet() -> pd.DataFrame:
-    client = get_sheet_client()
-    sheet = client.open_by_key(st.secrets["sheets"]["sheet_id"]).sheet1
-    data = sheet.get_all_records()
-    return pd.DataFrame(data)
-
+# ============================
+#       UI / UTIL HELPERS
+# ============================
 def colored_header_bg(title: str, bg_color: str, text_color: str = "white", font_size: int = 26):
     st.markdown(
         f"""
@@ -137,96 +38,102 @@ def colored_header_bg(title: str, bg_color: str, text_color: str = "white", font
             {title}
         </div>
         """,
-        unsafe_allow_html=True
+        unsafe_allow_html=True,
     )
-def _normalize_watch_df(df: pd.DataFrame) -> pd.DataFrame:
+
+def normalize_watch_df(df: pd.DataFrame) -> pd.DataFrame:
     out = pd.DataFrame({"Ticker": df.get("Ticker", pd.Series([], dtype=str))})
     out["Ticker"] = out["Ticker"].astype(str).str.upper().str.strip()
     out = out[out["Ticker"] != ""]
     return out[["Ticker"]]
 
-def _signature(df: pd.DataFrame) -> int:
+def signature(df: pd.DataFrame) -> int:
     tickers = df["Ticker"].tolist() if "Ticker" in df.columns else []
     return hash(tuple(tickers))
 
-# ---------- Bootstrap watchlist from Sheets on first session ----------
-if "watchlist" not in st.session_state:
+# ============================
+#     GOOGLE SHEETS HELPERS
+# ============================
+def _assert_sheets_secrets():
+    if "sheets" not in st.secrets:
+        st.error("Missing [sheets] in secrets (App → Settings → Secrets, or .streamlit/secrets.toml).")
+        st.stop()
+    s = st.secrets["sheets"]
+    for k in ("sheet_id", "service_account"):
+        if k not in s:
+            st.error(f"Missing key in [sheets]: {k}")
+            st.stop()
+
+@st.cache_resource
+def get_sheet_client():
+    _assert_sheets_secrets()
+    raw = st.secrets["sheets"]["service_account"]
+
+    if isinstance(raw, dict):
+        info = raw
+    else:
+        # Escape real newlines inside the private_key ONLY (common paste issue)
+        def _escape_pk_newlines(s: str) -> str:
+            return re.sub(
+                r'("private_key"\s*:\s*")([^"]+?)(")',
+                lambda m: m.group(1) + m.group(2).replace("\n", "\\n") + m.group(3),
+                s,
+                flags=re.S,
+            )
+        fixed = _escape_pk_newlines(raw)
+        info = json.loads(fixed)
+
+    creds = service_account.Credentials.from_service_account_info(
+        info, scopes=["https://www.googleapis.com/auth/spreadsheets"]
+    )
+    return gspread.authorize(creds)
+
+def _open_or_create_worksheet(client: gspread.Client, sheet_id: str, tab_name: str):
+    sh = client.open_by_key(sheet_id)
     try:
-        df0 = load_watchlist_from_sheet()          # pulls from Sheets
-        if df0 is None or df0.empty:
-            df0 = pd.DataFrame({"Ticker": ["QQQ", "AAPL", "MSFT"]})  # seed if sheet empty
-        st.session_state["watchlist"] = _normalize_watch_df(df0)
-        st.session_state["_watchlist_sig"] = None   # initialize signature for autosave
-    except Exception as e:
-        # If Sheets not configured or fails, fall back to a local seed
-        st.session_state["watchlist"] = pd.DataFrame({"Ticker": ["QQQ", "AAPL", "MSFT"]})
-        st.session_state["_watchlist_sig"] = None
+        ws = sh.worksheet(tab_name)
+    except gspread.exceptions.WorksheetNotFound:
+        ws = sh.add_worksheet(title=tab_name, rows=1000, cols=5)
+        ws.update("A1", [["Ticker"]])
+    return ws
 
-# ---- 1) Bootstrap (unchanged) ----
-if "watchlist" not in st.session_state or st.session_state["watchlist"] is None:
-    st.session_state["watchlist"] = pd.DataFrame({"Ticker": ["QQQ", "AAPL", "MSFT"]})
+def save_watchlist_to_sheet(df: pd.DataFrame):
+    client = get_sheet_client()
+    ws = _open_or_create_worksheet(client, st.secrets["sheets"]["sheet_id"], SHEET_TAB_NAME)
+    clean = normalize_watch_df(df)
+    ws.clear()
+    values = [clean.columns.tolist()] + clean.values.tolist() if not clean.empty else [["Ticker"]]
+    ws.update("A1", values)
+    st.success(f"✅ Saved {0 if clean.empty else len(clean)} tickers to Google Sheets ({SHEET_TAB_NAME}).")
 
-# ---------- Watchlist editor ----------
-watch_edited = st.data_editor(
-    st.session_state["watchlist"],
-    num_rows="dynamic",
-    width="stretch",  # replace deprecated use_container_width
-    key="watchlist_editor_v2",
-    column_config={
-        "Ticker": st.column_config.TextColumn(
-            help="Any Yahoo Finance symbol, e.g., MSFT, ETH-USD, XAUUSD=X"
-        ),
-    },
-)
-st.session_state["watchlist"] = _normalize_watch_df(watch_edited)
+def load_watchlist_from_sheet() -> pd.DataFrame:
+    client = get_sheet_client()
+    ws = _open_or_create_worksheet(client, st.secrets["sheets"]["sheet_id"], SHEET_TAB_NAME)
+    values = ws.get_all_values()
+    if not values:
+        return pd.DataFrame({"Ticker": []})
+    header, *rows = values
+    if "Ticker" not in header:
+        tickers = [r[0] for r in rows if r]
+        return normalize_watch_df(pd.DataFrame({"Ticker": tickers}))
+    df = pd.DataFrame(rows, columns=header)
+    return normalize_watch_df(df)
 
-# ---------- Debounced autosave to Sheets (after editor) ----------
-def _signature(df: pd.DataFrame) -> int:
-    # stable signature from ordered tickers
-    tickers = df["Ticker"].tolist() if "Ticker" in df.columns else []
-    return hash(tuple(tickers))
-
-curr = st.session_state["watchlist"]
-sig = _signature(curr)
-prev = st.session_state.get("_watchlist_sig")
-
-# Save only on actual user change, and only if Sheets is configured
-sheets_ok = ("sheets" in st.secrets) and st.secrets["sheets"].get("service_account") and st.secrets["sheets"].get("sheet_id")
-if sheets_ok and prev is not None and sig != prev:
+def sheets_configured() -> bool:
     try:
-        save_watchlist_to_sheet(curr)
-        st.toast("Autosaved to Google Sheets")
-    except Exception as e:
-        st.warning(f"Autosave failed: {e}")
+        s = st.secrets["sheets"]
+        return bool(s.get("sheet_id")) and bool(s.get("service_account"))
+    except Exception:
+        return False
 
-# Always update signature (first run sets it; later runs compare)
-st.session_state["_watchlist_sig"] = sig
-
-# Unique, non-empty tickers
-tickers = [t for t in curr["Ticker"].unique().tolist() if t]
-
-# Fetch latest prices (cached)
-prices_map = fetch_latest_prices(tickers)
-view = curr.copy()
-view["Live Price"] = view["Ticker"].map(prices_map)
-
-# Daily change
-wl_changes = day_change(tickers)
-view = view.merge(wl_changes, on="Ticker", how="left")
-
-# Display
-st.dataframe(
-    view.style.format({"Live Price": "${:,.4f}", "Daily Change %": "{:,.2f}%"}),
-    width="stretch",
-)
-
-
-# ---------- Price utilities ----------
-@st.cache_data(ttl=45)
-def fetch_latest_prices(tickers: List[str]) -> Dict[str, float]:
+# ============================
+#        MARKET HELPERS
+# ============================
+@st.cache_data(ttl=60)
+def fetch_latest_prices_batched(tickers: List[str]) -> Dict[str, float]:
     """
-    Return a mapping {ticker: last_close or None} for the given tickers.
-    Uses a batched yfinance download for speed, with a per-ticker fallback.
+    Return {ticker: last_close or None}. Batches with yf.download for speed,
+    then falls back to per-ticker if needed.
     """
     tickers = [t for t in pd.unique(pd.Series(tickers).astype(str).str.upper().str.strip()) if t]
     out: Dict[str, float] = {t: None for t in tickers}
@@ -236,14 +143,14 @@ def fetch_latest_prices(tickers: List[str]) -> Dict[str, float]:
     try:
         df = yf.download(
             tickers=tickers,
-            period="5d",        # use a few days so we can still compute change and handle holidays
+            period="5d",
             interval="1d",
             group_by="ticker",
             progress=False,
             threads=True,
+            auto_adjust=False,  # be explicit
         )
         if isinstance(df.columns, pd.MultiIndex):
-            # Multi-ticker frame
             for t in tickers:
                 try:
                     d = df[t].dropna()
@@ -252,15 +159,13 @@ def fetch_latest_prices(tickers: List[str]) -> Dict[str, float]:
                 except Exception:
                     pass
         else:
-            # Single-ticker frame
             d = df.dropna()
             if not d.empty:
                 out[tickers[0]] = float(d["Close"].iloc[-1])
     except Exception:
-        # Fall back silently; we'll try per-ticker below if needed
         pass
 
-    # Per-ticker fallback for any missing values
+    # Per-ticker fallback
     missing = [t for t, v in out.items() if v is None]
     for t in missing:
         try:
@@ -272,14 +177,15 @@ def fetch_latest_prices(tickers: List[str]) -> Dict[str, float]:
     return out
 
 @st.cache_data(ttl=60)
-def day_change(tickers: List[str]) -> pd.DataFrame:
+def day_change_pct(tickers: List[str]) -> pd.DataFrame:
     """
-    Compute previous-close to last-close daily % change for each ticker.
-    Returns DataFrame with columns ["Ticker", "Daily Change %"].
+    Compute previous-close → last-close daily % change.
+    Returns DataFrame ["Ticker","Daily Change %"].
     """
     tickers = [t for t in pd.unique(pd.Series(tickers).astype(str).str.upper().str.strip()) if t]
     if not tickers:
         return pd.DataFrame(columns=["Ticker", "Daily Change %"])
+
     rows = []
     try:
         df = yf.download(
@@ -289,6 +195,7 @@ def day_change(tickers: List[str]) -> pd.DataFrame:
             group_by="ticker",
             progress=False,
             threads=True,
+            auto_adjust=False,
         )
         if isinstance(df.columns, pd.MultiIndex):
             for t in tickers:
@@ -297,8 +204,7 @@ def day_change(tickers: List[str]) -> pd.DataFrame:
                     if len(d) >= 2:
                         prev_close = float(d["Close"].iloc[-2])
                         last_close = float(d["Close"].iloc[-1])
-                        change = round((last_close / prev_close - 1) * 100, 2)
-                        rows.append({"Ticker": t, "Daily Change %": change})
+                        rows.append({"Ticker": t, "Daily Change %": round((last_close / prev_close - 1) * 100, 2)})
                 except Exception:
                     pass
         else:
@@ -306,99 +212,85 @@ def day_change(tickers: List[str]) -> pd.DataFrame:
             if len(d) >= 2:
                 prev_close = float(d["Close"].iloc[-2])
                 last_close = float(d["Close"].iloc[-1])
-                change = round((last_close / prev_close - 1) * 100, 2)
-                rows.append({"Ticker": tickers[0], "Daily Change %": change})
+                rows.append({"Ticker": tickers[0], "Daily Change %": round((last_close / prev_close - 1) * 100, 2)})
     except Exception:
         pass
     return pd.DataFrame(rows, columns=["Ticker", "Daily Change %"])
 
 # ============================
-#        WATCHLIST UI
+#     SESSION BOOTSTRAP
+# ============================
+if "watchlist" not in st.session_state:
+    try:
+        if sheets_configured():
+            df0 = load_watchlist_from_sheet()
+        else:
+            df0 = pd.DataFrame({"Ticker": ["QQQ", "AAPL", "MSFT"]})
+        if df0 is None or df0.empty:
+            df0 = pd.DataFrame({"Ticker": ["QQQ", "AAPL", "MSFT"]})
+        st.session_state["watchlist"] = normalize_watch_df(df0)
+        st.session_state["_watchlist_sig"] = None
+    except Exception:
+        st.session_state["watchlist"] = pd.DataFrame({"Ticker": ["QQQ", "AAPL", "MSFT"]})
+        st.session_state["_watchlist_sig"] = None
+
+# ============================
+#         WATCHLIST UI
 # ============================
 colored_header_bg("👀 Watchlist", "#8A2BE2", "white", 26)
 
 watch_edited = st.data_editor(
     st.session_state["watchlist"],
     num_rows="dynamic",
-    use_container_width=True,
-    key="watchlist_editor",
+    width="stretch",
+    key="watchlist_editor_v2",
     column_config={
         "Ticker": st.column_config.TextColumn(
             help="Any Yahoo Finance symbol, e.g., MSFT, ETH-USD, XAUUSD=X"
         ),
     },
 )
-st.session_state["watchlist"] = watch_edited
+st.session_state["watchlist"] = normalize_watch_df(watch_edited)
 
-# Build working DataFrame
-watch = st.session_state["watchlist"].copy()
-if "Ticker" not in watch.columns:
-    watch["Ticker"] = ""
-watch["Ticker"] = watch["Ticker"].astype(str).str.upper().str.strip()
-
-# Unique, non-empty tickers
-tickers = [t for t in watch["Ticker"].unique().tolist() if t]
-
-# Fetch latest prices (cached)
-prices_map = fetch_latest_prices(tickers)
-watch["Live Price"] = watch["Ticker"].map(prices_map)
-
-# Fetch daily % change (cached) and merge
-wl_changes = day_change(tickers)
-watch = watch.merge(wl_changes, on="Ticker", how="left")
-
-# Display
-st.dataframe(
-    watch.style.format({"Live Price": "${:,.4f}", "Daily Change %": "{:,.2f}%"}),
-    use_container_width=True,
-)
-
-# ---- 3) Autosave (after editor) ----
-def _normalize_watch_df(df: pd.DataFrame) -> pd.DataFrame:
-    out = pd.DataFrame({"Ticker": df.get("Ticker", pd.Series([], dtype=str))})
-    out["Ticker"] = out["Ticker"].astype(str).str.upper().str.strip()
-    out = out.dropna(subset=["Ticker"])
-    return out[["Ticker"]]
-
-def _signature(df: pd.DataFrame) -> int:
-    # Stable signature: tuple of cleaned tickers in order + length
-    tickers = df["Ticker"].tolist() if "Ticker" in df.columns else []
-    return hash((tuple(tickers), len(tickers)))
-
-curr = _normalize_watch_df(st.session_state["watchlist"])
-sig = _signature(curr)
-
-prev_sig = st.session_state.get("_watchlist_sig")
-
-# Only save if:
-#  - we have previous signature (i.e., not the very first run), and
-#  - the signature changed (i.e., user edited)
-should_save = prev_sig is not None and sig != prev_sig
-
-# Update signature every run
-st.session_state["_watchlist_sig"] = sig
-
-# Optional: guard if Sheets secrets not configured yet
-sheets_ready = ("sheets" in st.secrets) and ("service_account" in st.secrets["sheets"]) and ("sheet_id" in st.secrets["sheets"])
-
-if should_save and sheets_ready:
+# ---------- Autosave to Sheets after edits ----------
+curr = st.session_state["watchlist"]
+sig = signature(curr)
+prev = st.session_state.get("_watchlist_sig")
+if sheets_configured() and prev is not None and sig != prev:
     try:
         save_watchlist_to_sheet(curr)
-        st.toast("Autosaved to Sheets")
+        st.toast("Autosaved to Google Sheets")
     except Exception as e:
         st.warning(f"Autosave failed: {e}")
+st.session_state["_watchlist_sig"] = sig
 
+# ---------- Data (prices + change) ----------
+tickers = [t for t in curr["Ticker"].unique().tolist() if t]
+prices_map = fetch_latest_prices_batched(tickers)
+view = curr.copy()
+view["Live Price"] = view["Ticker"].map(prices_map)
 
+wl_changes = day_change_pct(tickers)
+view = view.merge(wl_changes, on="Ticker", how="left")
 
-c1, c2 = st.columns([1, 1])
-with c1:
-    if st.button("💾 Save to Sheets"):
-        save_watchlist_to_sheet(st.session_state["watchlist"])
-with c2:
-    if st.button("⬆️ Load from Sheets"):
-        st.session_state["watchlist"] = load_watchlist_from_sheet()
-        st.success("Loaded watchlist from Google Sheets!")
+st.dataframe(
+    view.style.format({"Live Price": "${:,.4f}", "Daily Change %": "{:,.2f}%"}),
+    width="stretch",
+)
 
+# ---------- Manual controls (optional) ----------
+if sheets_configured():
+    c1, c2 = st.columns([1, 1])
+    with c1:
+        if st.button("💾 Save to Sheets (manual)"):
+            save_watchlist_to_sheet(st.session_state["watchlist"])
+            st.success("Saved to Google Sheets.")
+    with c2:
+        if st.button("⬆️ Reload from Sheets"):
+            st.session_state["watchlist"] = load_watchlist_from_sheet()
+            st.session_state["_watchlist_sig"] = signature(st.session_state["watchlist"])
+            st.success("Reloaded from Google Sheets.")
+else:
+    st.info("Connect Google Sheets in Secrets to enable cloud persistence.")
 
-# Optional: little note about data freshness
-st.caption("Prices and daily change cached for ~45–60 seconds to keep things snappy.")
+st.caption("Prices & daily change cached ~60s. Uses batched Yahoo Finance requests for speed.")
