@@ -12,15 +12,6 @@ from urllib.parse import quote, unquote
 import gspread
 from google.oauth2 import service_account
 
-with st.expander("🛠 Sheets secrets check"):
-    try:
-        raw = st.secrets["sheets"]["service_account"]
-        st.write("Type of service_account in secrets:", type(raw).__name__)
-        if isinstance(raw, str):
-            st.write("Starts with:", raw.strip()[:20])
-    except Exception as e:
-        st.exception(e)
-
 
 # ---------- Page config ----------
 st.set_page_config(
@@ -32,7 +23,6 @@ st.set_page_config(
 
 # ---------- UI helpers ----------
 @st.cache_resource
-
 
 
 def _assert_sheets_secrets():
@@ -102,14 +92,76 @@ def colored_header_bg(title: str, bg_color: str, text_color: str = "white", font
         unsafe_allow_html=True
     )
 
-# ---------- State bootstrap ----------
+# ---------- Bootstrap watchlist from Sheets on first session ----------
+if "watchlist" not in st.session_state:
+    try:
+        df0 = load_watchlist_from_sheet()          # pulls from Sheets
+        if df0 is None or df0.empty:
+            df0 = pd.DataFrame({"Ticker": ["QQQ", "AAPL", "MSFT"]})  # seed if sheet empty
+        st.session_state["watchlist"] = _normalize_watch_df(df0)
+        st.session_state["_watchlist_sig"] = None   # initialize signature for autosave
+    except Exception as e:
+        # If Sheets not configured or fails, fall back to a local seed
+        st.session_state["watchlist"] = pd.DataFrame({"Ticker": ["QQQ", "AAPL", "MSFT"]})
+        st.session_state["_watchlist_sig"] = None
+
 # ---- 1) Bootstrap (unchanged) ----
 if "watchlist" not in st.session_state or st.session_state["watchlist"] is None:
     st.session_state["watchlist"] = pd.DataFrame({"Ticker": ["QQQ", "AAPL", "MSFT"]})
 
-# ---- 2) Editor (make sure this comes before autosave) ----
+# ---------- Watchlist editor ----------
+watch_edited = st.data_editor(
+    st.session_state["watchlist"],
+    num_rows="dynamic",
+    width="stretch",  # replace deprecated use_container_width
+    key="watchlist_editor_v2",
+    column_config={
+        "Ticker": st.column_config.TextColumn(
+            help="Any Yahoo Finance symbol, e.g., MSFT, ETH-USD, XAUUSD=X"
+        ),
+    },
+)
+st.session_state["watchlist"] = _normalize_watch_df(watch_edited)
 
+# ---------- Debounced autosave to Sheets (after editor) ----------
+def _signature(df: pd.DataFrame) -> int:
+    # stable signature from ordered tickers
+    tickers = df["Ticker"].tolist() if "Ticker" in df.columns else []
+    return hash(tuple(tickers))
 
+curr = st.session_state["watchlist"]
+sig = _signature(curr)
+prev = st.session_state.get("_watchlist_sig")
+
+# Save only on actual user change, and only if Sheets is configured
+sheets_ok = ("sheets" in st.secrets) and st.secrets["sheets"].get("service_account") and st.secrets["sheets"].get("sheet_id")
+if sheets_ok and prev is not None and sig != prev:
+    try:
+        save_watchlist_to_sheet(curr)
+        st.toast("Autosaved to Google Sheets")
+    except Exception as e:
+        st.warning(f"Autosave failed: {e}")
+
+# Always update signature (first run sets it; later runs compare)
+st.session_state["_watchlist_sig"] = sig
+
+# Unique, non-empty tickers
+tickers = [t for t in curr["Ticker"].unique().tolist() if t]
+
+# Fetch latest prices (cached)
+prices_map = fetch_latest_prices(tickers)
+view = curr.copy()
+view["Live Price"] = view["Ticker"].map(prices_map)
+
+# Daily change
+wl_changes = day_change(tickers)
+view = view.merge(wl_changes, on="Ticker", how="left")
+
+# Display
+st.dataframe(
+    view.style.format({"Live Price": "${:,.4f}", "Daily Change %": "{:,.2f}%"}),
+    width="stretch",
+)
 
 
 # ---------- Price utilities ----------
