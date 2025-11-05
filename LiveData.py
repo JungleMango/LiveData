@@ -1,3 +1,4 @@
+# LiveData.py
 import json
 from pathlib import Path
 from typing import Dict, List
@@ -8,6 +9,7 @@ import altair as alt
 import streamlit as st
 from urllib.parse import quote, unquote
 
+# ---------- Page config ----------
 st.set_page_config(
     page_title="Multi-Portfolio Dashboard",
     page_icon="📊",
@@ -15,9 +17,8 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
-import streamlit as st
-
-def colored_header_bg(title, bg_color, text_color="white", font_size=26):
+# ---------- UI helpers ----------
+def colored_header_bg(title: str, bg_color: str, text_color: str = "white", font_size: int = 26):
     st.markdown(
         f"""
         <div style="
@@ -34,32 +35,80 @@ def colored_header_bg(title, bg_color, text_color="white", font_size=26):
         unsafe_allow_html=True
     )
 
+# ---------- State bootstrap ----------
+if "watchlist" not in st.session_state or st.session_state["watchlist"] is None:
+    # Start with an empty watchlist; drop in a few examples if you like
+    st.session_state["watchlist"] = pd.DataFrame({"Ticker": ["QQQ", "AAPL", "MSFT"]})
 
+# ---------- Price utilities ----------
+@st.cache_data(ttl=45)
+def fetch_latest_prices(tickers: List[str]) -> Dict[str, float]:
+    """
+    Return a mapping {ticker: last_close or None} for the given tickers.
+    Uses a batched yfinance download for speed, with a per-ticker fallback.
+    """
+    tickers = [t for t in pd.unique(pd.Series(tickers).astype(str).str.upper().str.strip()) if t]
+    out: Dict[str, float] = {t: None for t in tickers}
+    if not tickers:
+        return out
 
-# ---------- 4) Watchlist ----------
-colored_header_bg("👀 Watchlist", "#8A2BE2", "white", 26)
-watch_edited = st.data_editor(
-    st.session_state["watchlist"],
-    num_rows="dynamic",
-    use_container_width=True,
-    key="watchlist_editor",
-    column_config={
-        "Ticker": st.column_config.TextColumn(help="Any Yahoo Finance symbol, e.g., MSFT, ETH-USD, XAUUSD=X"),
-    },
-)
-st.session_state["watchlist"] = watch_edited
+    try:
+        df = yf.download(
+            tickers=tickers,
+            period="5d",        # use a few days so we can still compute change and handle holidays
+            interval="1d",
+            group_by="ticker",
+            progress=False,
+            threads=True,
+        )
+        if isinstance(df.columns, pd.MultiIndex):
+            # Multi-ticker frame
+            for t in tickers:
+                try:
+                    d = df[t].dropna()
+                    if not d.empty:
+                        out[t] = float(d["Close"].iloc[-1])
+                except Exception:
+                    pass
+        else:
+            # Single-ticker frame
+            d = df.dropna()
+            if not d.empty:
+                out[tickers[0]] = float(d["Close"].iloc[-1])
+    except Exception:
+        # Fall back silently; we'll try per-ticker below if needed
+        pass
 
-watch = st.session_state["watchlist"].copy()
-watch["Ticker"] = watch["Ticker"].astype(str).str.upper().str.strip()
-watch["Live Price"] = watch["Ticker"].map(prices)
+    # Per-ticker fallback for any missing values
+    missing = [t for t, v in out.items() if v is None]
+    for t in missing:
+        try:
+            h = yf.Ticker(t).history(period="5d", interval="1d")
+            if not h.empty:
+                out[t] = float(h["Close"].iloc[-1])
+        except Exception:
+            out[t] = None
+    return out
 
 @st.cache_data(ttl=60)
 def day_change(tickers: List[str]) -> pd.DataFrame:
+    """
+    Compute previous-close to last-close daily % change for each ticker.
+    Returns DataFrame with columns ["Ticker", "Daily Change %"].
+    """
+    tickers = [t for t in pd.unique(pd.Series(tickers).astype(str).str.upper().str.strip()) if t]
     if not tickers:
         return pd.DataFrame(columns=["Ticker", "Daily Change %"])
+    rows = []
     try:
-        df = yf.download(tickers=tickers, period="5d", interval="1d", group_by="ticker", progress=False, threads=True)
-        rows = []
+        df = yf.download(
+            tickers=tickers,
+            period="5d",
+            interval="1d",
+            group_by="ticker",
+            progress=False,
+            threads=True,
+        )
         if isinstance(df.columns, pd.MultiIndex):
             for t in tickers:
                 try:
@@ -67,7 +116,8 @@ def day_change(tickers: List[str]) -> pd.DataFrame:
                     if len(d) >= 2:
                         prev_close = float(d["Close"].iloc[-2])
                         last_close = float(d["Close"].iloc[-1])
-                        rows.append({"Ticker": t, "Daily Change %": round((last_close/prev_close - 1)*100, 2)})
+                        change = round((last_close / prev_close - 1) * 100, 2)
+                        rows.append({"Ticker": t, "Daily Change %": change})
                 except Exception:
                     pass
         else:
@@ -75,15 +125,52 @@ def day_change(tickers: List[str]) -> pd.DataFrame:
             if len(d) >= 2:
                 prev_close = float(d["Close"].iloc[-2])
                 last_close = float(d["Close"].iloc[-1])
-                rows.append({"Ticker": tickers[0], "Daily Change %": round((last_close/prev_close - 1)*100, 2)})
-        return pd.DataFrame(rows)
+                change = round((last_close / prev_close - 1) * 100, 2)
+                rows.append({"Ticker": tickers[0], "Daily Change %": change})
     except Exception:
-        return pd.DataFrame(columns=["Ticker", "Daily Change %"])
+        pass
+    return pd.DataFrame(rows, columns=["Ticker", "Daily Change %"])
 
-wl_changes = day_change([t for t in watch["Ticker"] if t])
+# ============================
+#        WATCHLIST UI
+# ============================
+colored_header_bg("👀 Watchlist", "#8A2BE2", "white", 26)
+
+watch_edited = st.data_editor(
+    st.session_state["watchlist"],
+    num_rows="dynamic",
+    use_container_width=True,
+    key="watchlist_editor",
+    column_config={
+        "Ticker": st.column_config.TextColumn(
+            help="Any Yahoo Finance symbol, e.g., MSFT, ETH-USD, XAUUSD=X"
+        ),
+    },
+)
+st.session_state["watchlist"] = watch_edited
+
+# Build working DataFrame
+watch = st.session_state["watchlist"].copy()
+if "Ticker" not in watch.columns:
+    watch["Ticker"] = ""
+watch["Ticker"] = watch["Ticker"].astype(str).str.upper().str.strip()
+
+# Unique, non-empty tickers
+tickers = [t for t in watch["Ticker"].unique().tolist() if t]
+
+# Fetch latest prices (cached)
+prices_map = fetch_latest_prices(tickers)
+watch["Live Price"] = watch["Ticker"].map(prices_map)
+
+# Fetch daily % change (cached) and merge
+wl_changes = day_change(tickers)
 watch = watch.merge(wl_changes, on="Ticker", how="left")
 
+# Display
 st.dataframe(
     watch.style.format({"Live Price": "${:,.4f}", "Daily Change %": "{:,.2f}%"}),
     use_container_width=True,
 )
+
+# Optional: little note about data freshness
+st.caption("Prices and daily change cached for ~45–60 seconds to keep things snappy.")
