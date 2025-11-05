@@ -11,6 +11,14 @@ from urllib.parse import quote, unquote
 import gspread
 from google.oauth2 import service_account
 
+with st.expander("🛠 Sheets secrets check"):
+    try:
+        raw = st.secrets["sheets"]["service_account"]
+        st.write("Type of service_account in secrets:", type(raw).__name__)
+        if isinstance(raw, str):
+            st.write("Starts with:", raw.strip()[:20])
+    except Exception as e:
+        st.exception(e)
 
 
 # ---------- Page config ----------
@@ -23,14 +31,42 @@ st.set_page_config(
 
 # ---------- UI helpers ----------
 @st.cache_resource
+def _assert_sheets_secrets():
+    if "sheets" not in st.secrets:
+        st.error("Missing [sheets] in secrets. Add it in App → Settings → Secrets or .streamlit/secrets.toml.")
+        st.stop()
+    s = st.secrets["sheets"]
+    for k in ("sheet_id", "service_account"):
+        if k not in s:
+            st.error(f"Missing key in [sheets]: {k}")
+            st.stop()
+
+@st.cache_resource
 def get_sheet_client():
-    creds_dict = json.loads(st.secrets["sheets"]["service_account"])
+    _assert_sheets_secrets()
+    raw = st.secrets["sheets"]["service_account"]
+
+    # Accept either a dict (already parsed) or a JSON string
+    if isinstance(raw, dict):
+        info = raw
+    else:
+        try:
+            info = json.loads(raw)
+        except Exception as e:
+            # Helpful hint if the private_key likely has raw newlines
+            st.error(
+                "Couldn't parse service_account JSON from secrets. "
+                "Most likely the `private_key` needs `\\n` (double backslash) line breaks.\n\n"
+                "Fix in secrets: replace every \\n in private_key with \\\\n."
+            )
+            st.exception(e)
+            st.stop()
+
     creds = service_account.Credentials.from_service_account_info(
-        creds_dict,
-        scopes=["https://www.googleapis.com/auth/spreadsheets"]
+        info,
+        scopes=["https://www.googleapis.com/auth/spreadsheets"],
     )
-    client = gspread.authorize(creds)
-    return client
+    return gspread.authorize(creds)
 
 def save_watchlist_to_sheet(df: pd.DataFrame):
     client = get_sheet_client()
