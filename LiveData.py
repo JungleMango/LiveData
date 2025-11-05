@@ -275,45 +275,56 @@ if "watchlist" not in st.session_state:
 #         WATCHLIST UI
 # ============================
 
+# ============================
+#         WATCHLIST UI
+# ============================
 colored_header_bg("👀 Watchlist", "#8A2BE2", "white", 26)
 
 # Build computed columns
 curr = normalize_watch_df(st.session_state["watchlist"])
 tickers = [t for t in curr["Ticker"].unique().tolist() if t]
 
-# Prices + daily change (existing helpers)
 prices_map = fetch_latest_prices_batched(tickers)
-changes_df = day_change_pct(tickers)   # ["Ticker", "Daily Change %"]
+changes_df = day_change_pct(tickers)  # ["Ticker","Daily Change %"]
 
-# New: history once, then compute 7D change & 30D sparkline
+# History for 7D% and 30D sparkline
 hist_map = recent_history(tickers, days=60)
 
 def _pct_7d(series: pd.Series):
     if series is None or series.empty or len(series) < 8:
         return None
     last = float(series.iloc[-1])
-    prev = float(series.iloc[-8])   # ~7 trading sessions ago
+    prev = float(series.iloc[-8])  # ~7 trading sessions ago
     if prev == 0:
         return None
     return round((last / prev - 1) * 100, 2)
-
-map_7d = {t: _pct_7d(hist_map.get(t)) for t in tickers}
 
 def _last_30(series: pd.Series):
     if series is None or series.empty:
         return []
     return [float(x) for x in series.tail(30).tolist()]
 
+map_7d = {t: _pct_7d(hist_map.get(t)) for t in tickers}
 map_30 = {t: _last_30(hist_map.get(t)) for t in tickers}
 
-# Compose the view
+# Compose view
 view = curr.copy()
 view["Live Price"] = view["Ticker"].map(prices_map)
 view = view.merge(changes_df, on="Ticker", how="left")
 view["7D % Change"] = view["Ticker"].map(map_7d)
 view["30D Trend"]   = view["Ticker"].map(map_30)
 
-# Single editable table: only Ticker is editable
+# Build a version-safe chart column config
+LineChartColumn = getattr(st.column_config, "LineChartColumn", None)
+if LineChartColumn is not None:
+    chart_col = LineChartColumn()  # keep defaults; older versions may not accept y_min/y_max
+else:
+    # Fallback for older Streamlit: show the numbers as a list, with a hint to upgrade
+    chart_col = st.column_config.ListColumn(
+        help="Upgrade Streamlit to enable in-cell line charts for this column."
+    )
+
+# Single editable table; only Ticker is editable.
 edited = st.data_editor(
     view,
     width="stretch",
@@ -323,11 +334,13 @@ edited = st.data_editor(
         "Ticker": st.column_config.TextColumn(
             help="Any Yahoo Finance symbol, e.g., MSFT, ETH-USD, XAUUSD=X"
         ),
-        "Live Price": st.column_config.NumberColumn(format="$%.4f", disabled=True),
-        "Daily Change %": st.column_config.NumberColumn(format="%.2f%%", disabled=True),
-        "7D % Change": st.column_config.NumberColumn(format="%.2f%%", disabled=True),
-        "30D Trend": st.column_config.LineChartColumn(y_min=None, y_max=None, disabled=True),
+        "Live Price": st.column_config.NumberColumn(format="$%.4f"),
+        "Daily Change %": st.column_config.NumberColumn(format="%.2f%%"),
+        "7D % Change": st.column_config.NumberColumn(format="%.2f%%"),
+        "30D Trend": chart_col,
     },
+    # Mark computed columns as read-only in a version-stable way
+    disabled=["Live Price", "Daily Change %", "7D % Change", "30D Trend"],
 )
 
 # Persist only Ticker back to state
