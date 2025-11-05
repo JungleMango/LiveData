@@ -316,10 +316,11 @@ colored_header_bg("👀 Watchlist", "#8A2BE2", "white", 26)
 curr = normalize_watch_df(st.session_state["watchlist"])
 tickers = [t for t in curr["Ticker"].unique().tolist() if t]
 
-names_map   = fetch_names(tickers)
-prices_map  = fetch_latest_prices_batched(tickers)
-changes_df  = day_change_pct(tickers)   # ["Ticker","Daily Change %"]
-hist_map    = recent_history(tickers, days=60)
+prices_map = fetch_latest_prices_batched(tickers)
+changes_df = day_change_pct(tickers)  # ["Ticker","Daily Change %"]
+
+# History for 7D% and 30D sparkline
+hist_map = recent_history(tickers, days=60)
 
 def _pct_7d(series: pd.Series):
     if series is None or series.empty or len(series) < 8:
@@ -338,39 +339,52 @@ def _last_30(series: pd.Series):
 map_7d = {t: _pct_7d(hist_map.get(t)) for t in tickers}
 map_30 = {t: _last_30(hist_map.get(t)) for t in tickers}
 
-# Compose the view (Ticker editable; others computed)
+# Compose view
 view = curr.copy()
-view["Name"]          = view["Ticker"].map(names_map)
-view["Live Price"]    = view["Ticker"].map(prices_map)
-view                   = view.merge(changes_df, on="Ticker", how="left")
-view["7D % Change"]   = view["Ticker"].map(map_7d)
-view["30D Trend"]     = view["Ticker"].map(map_30)
+view["Live Price"] = view["Ticker"].map(prices_map)
+view = view.merge(changes_df, on="Ticker", how="left")
+view["7D % Change"] = view["Ticker"].map(map_7d)
+view["30D Trend"]   = view["Ticker"].map(map_30)
 
-# Version-safe chart column
+# Build a version-safe chart column config
 LineChartColumn = getattr(st.column_config, "LineChartColumn", None)
-chart_col = LineChartColumn() if LineChartColumn else st.column_config.ListColumn(
-    help="Upgrade Streamlit to enable in-cell line charts for this column."
-)
+if LineChartColumn is not None:
+    chart_col = LineChartColumn()  # keep defaults; older versions may not accept y_min/y_max
+else:
+    # Fallback for older Streamlit: show the numbers as a list, with a hint to upgrade
+    chart_col = st.column_config.ListColumn(
+        help="Upgrade Streamlit to enable in-cell line charts for this column."
+    )
 
-#editor 
+# Single editable table; only Ticker is editable.
 edited = st.data_editor(
     view,
     width="stretch",
     key="watchlist_editor_single",
     num_rows="dynamic",
-    column_order=["Ticker", "Name", "Live Price", "Daily Change %", "7D % Change", "30D Trend"],
     column_config={
-        "Ticker": TextCol_safe(
-            help="Enter any Yahoo Finance symbol, e.g., MSFT, ETH-USD, XAUUSD=X",
-            required=True,          # will be ignored on older versions
-            max_chars=32,           # will be ignored on older versions
-            placeholder="e.g., AAPL"
+        "Ticker": st.column_config.TextColumn(
+            help="Any Yahoo Finance symbol, e.g., MSFT, ETH-USD, XAUUSD=X"
         ),
-        "Name": st.column_config.TextColumn(help="Company / asset name (auto)", disabled=True),
         "Live Price": st.column_config.NumberColumn(format="$%.4f"),
         "Daily Change %": st.column_config.NumberColumn(format="%.2f%%"),
         "7D % Change": st.column_config.NumberColumn(format="%.2f%%"),
         "30D Trend": chart_col,
     },
-    disabled=["Name", "Live Price", "Daily Change %", "7D % Change", "30D Trend"],
+    # Mark computed columns as read-only in a version-stable way
+    disabled=["Live Price", "Daily Change %", "7D % Change", "30D Trend"],
 )
+
+# Persist only Ticker back to state
+st.session_state["watchlist"] = normalize_watch_df(edited[["Ticker"]])
+
+# Autosave after edits (if Sheets configured)
+sig = signature(st.session_state["watchlist"])
+prev = st.session_state.get("_watchlist_sig")
+if sheets_configured() and prev is not None and sig != prev:
+    try:
+        save_watchlist_to_sheet(st.session_state["watchlist"])
+        st.toast("Autosaved to Google Sheets")
+    except Exception as e:
+        st.warning(f"Autosave failed: {e}")
+st.session_state["_watchlist_sig"] = sig
