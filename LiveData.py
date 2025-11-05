@@ -42,6 +42,37 @@ def fetch_latest_prices(tickers):
 
     return prices
 
+def day_change(tickers):
+    """Return daily % change for each ticker."""
+    import pandas as pd
+    if not tickers:
+        return pd.DataFrame(columns=["Ticker", "Daily Change %"])
+    try:
+        df = yf.download(tickers=tickers, period="5d", interval="1d",
+                         group_by="ticker", progress=False, threads=True, auto_adjust=False)
+        rows = []
+        if isinstance(df.columns, pd.MultiIndex):
+            for t in tickers:
+                try:
+                    d = df[t].dropna()
+                    if len(d) >= 2:
+                        prev_close = float(d["Close"].iloc[-2])
+                        last_close = float(d["Close"].iloc[-1])
+                        change = round((last_close / prev_close - 1) * 100, 2)
+                        rows.append({"Ticker": t, "Daily Change %": change})
+                except Exception:
+                    pass
+        else:
+            d = df.dropna()
+            if len(d) >= 2:
+                prev_close = float(d["Close"].iloc[-2])
+                last_close = float(d["Close"].iloc[-1])
+                change = round((last_close / prev_close - 1) * 100, 2)
+                rows.append({"Ticker": tickers[0], "Daily Change %": change})
+        return pd.DataFrame(rows)
+    except Exception:
+        return pd.DataFrame(columns=["Ticker", "Daily Change %"])
+
 def _assert_sheets_secrets():
     if "sheets" not in st.secrets:
         st.error("Missing [sheets] in secrets.")
