@@ -237,20 +237,56 @@ if "watchlist" not in st.session_state:
 # ============================
 #         WATCHLIST UI
 # ============================
+
 colored_header_bg("👀 Watchlist", "#8A2BE2", "white", 26)
 
-watch_edited = st.data_editor(
-    st.session_state["watchlist"],
-    num_rows="dynamic",
+# 1) Build the view with computed columns
+curr = normalize_watch_df(st.session_state["watchlist"])
+tickers = [t for t in curr["Ticker"].unique().tolist() if t]
+
+prices_map = fetch_latest_prices_batched(tickers)
+changes_df = day_change_pct(tickers)   # ["Ticker", "Daily Change %"]
+
+view = curr.copy()
+view["Live Price"] = view["Ticker"].map(prices_map)
+view = view.merge(changes_df, on="Ticker", how="left")
+
+# 2) Single editor: user edits Ticker; computed columns are read-only
+edited = st.data_editor(
+    view,
     width="stretch",
-    key="watchlist_editor_v2",
+    key="watchlist_editor_v3",
+    num_rows="dynamic",
     column_config={
         "Ticker": st.column_config.TextColumn(
             help="Any Yahoo Finance symbol, e.g., MSFT, ETH-USD, XAUUSD=X"
         ),
+        "Live Price": st.column_config.NumberColumn(
+            format="$%.4f",
+            disabled=True,           # read-only
+        ),
+        "Daily Change %": st.column_config.NumberColumn(
+            format="%.2f%%",
+            disabled=True,           # read-only
+        ),
     },
 )
-st.session_state["watchlist"] = normalize_watch_df(watch_edited)
+
+# 3) Persist only the Ticker column back to session_state
+st.session_state["watchlist"] = normalize_watch_df(edited[["Ticker"]])
+
+# 4) Autosave after edits (if you already wired Sheets)
+curr = st.session_state["watchlist"]
+sig = signature(curr)
+prev = st.session_state.get("_watchlist_sig")
+if sheets_configured() and prev is not None and sig != prev:
+    try:
+        save_watchlist_to_sheet(curr)
+        st.toast("Autosaved to Google Sheets")
+    except Exception as e:
+        st.warning(f"Autosave failed: {e}")
+st.session_state["_watchlist_sig"] = sig
+
 
 # ---------- Autosave to Sheets after edits ----------
 curr = st.session_state["watchlist"]
