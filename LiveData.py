@@ -15,6 +15,24 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
+import streamlit as st
+
+def colored_header_bg(title, bg_color, text_color="white", font_size=26):
+    st.markdown(
+        f"""
+        <div style="
+            background-color: {bg_color};
+            color: {text_color};
+            padding: 10px;
+            border-radius: 8px;
+            font-size: {font_size}px;
+            font-weight: bold;
+            text-align: left;">
+            {title}
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
 
 
 
