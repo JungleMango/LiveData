@@ -217,6 +217,43 @@ def day_change_pct(tickers: List[str]) -> pd.DataFrame:
         pass
     return pd.DataFrame(rows, columns=["Ticker", "Daily Change %"])
 
+@st.cache_data(ttl=300)
+def recent_history(tickers: List[str], days: int = 60) -> Dict[str, pd.Series]:
+    """
+    Returns {ticker: Series of daily Close (last <=days)} using one batched download.
+    """
+    out: Dict[str, pd.Series] = {t: pd.Series(dtype=float) for t in tickers}
+    if not tickers:
+        return out
+
+    df = yf.download(
+        tickers=tickers,
+        period=f"{days}d",
+        interval="1d",
+        group_by="ticker",
+        progress=False,
+        threads=True,
+        auto_adjust=False,
+    )
+
+    if isinstance(df.columns, pd.MultiIndex):
+        for t in tickers:
+            try:
+                d = df[t]["Close"].dropna()
+                out[t] = d
+            except Exception:
+                pass
+    else:
+        # single ticker case
+        try:
+            d = df["Close"].dropna()
+            out[tickers[0]] = d
+        except Exception:
+            pass
+    return out
+
+
+
 # ============================
 #     SESSION BOOTSTRAP
 # ============================
@@ -240,89 +277,69 @@ if "watchlist" not in st.session_state:
 
 colored_header_bg("👀 Watchlist", "#8A2BE2", "white", 26)
 
-# 1) Build the view with computed columns
+# Build computed columns
 curr = normalize_watch_df(st.session_state["watchlist"])
 tickers = [t for t in curr["Ticker"].unique().tolist() if t]
 
+# Prices + daily change (existing helpers)
 prices_map = fetch_latest_prices_batched(tickers)
 changes_df = day_change_pct(tickers)   # ["Ticker", "Daily Change %"]
 
+# New: history once, then compute 7D change & 30D sparkline
+hist_map = recent_history(tickers, days=60)
+
+def _pct_7d(series: pd.Series):
+    if series is None or series.empty or len(series) < 8:
+        return None
+    last = float(series.iloc[-1])
+    prev = float(series.iloc[-8])   # ~7 trading sessions ago
+    if prev == 0:
+        return None
+    return round((last / prev - 1) * 100, 2)
+
+map_7d = {t: _pct_7d(hist_map.get(t)) for t in tickers}
+
+def _last_30(series: pd.Series):
+    if series is None or series.empty:
+        return []
+    return [float(x) for x in series.tail(30).tolist()]
+
+map_30 = {t: _last_30(hist_map.get(t)) for t in tickers}
+
+# Compose the view
 view = curr.copy()
 view["Live Price"] = view["Ticker"].map(prices_map)
 view = view.merge(changes_df, on="Ticker", how="left")
+view["7D % Change"] = view["Ticker"].map(map_7d)
+view["30D Trend"]   = view["Ticker"].map(map_30)
 
-# 2) Single editor: user edits Ticker; computed columns are read-only
+# Single editable table: only Ticker is editable
 edited = st.data_editor(
     view,
     width="stretch",
-    key="watchlist_editor_v3",
+    key="watchlist_editor_single",
     num_rows="dynamic",
     column_config={
         "Ticker": st.column_config.TextColumn(
             help="Any Yahoo Finance symbol, e.g., MSFT, ETH-USD, XAUUSD=X"
         ),
-        "Live Price": st.column_config.NumberColumn(
-            format="$%.4f",
-            disabled=True,           # read-only
-        ),
-        "Daily Change %": st.column_config.NumberColumn(
-            format="%.2f%%",
-            disabled=True,           # read-only
-        ),
+        "Live Price": st.column_config.NumberColumn(format="$%.4f", disabled=True),
+        "Daily Change %": st.column_config.NumberColumn(format="%.2f%%", disabled=True),
+        "7D % Change": st.column_config.NumberColumn(format="%.2f%%", disabled=True),
+        "30D Trend": st.column_config.LineChartColumn(y_min=None, y_max=None, disabled=True),
     },
 )
 
-# 3) Persist only the Ticker column back to session_state
+# Persist only Ticker back to state
 st.session_state["watchlist"] = normalize_watch_df(edited[["Ticker"]])
 
-# 4) Autosave after edits (if you already wired Sheets)
-curr = st.session_state["watchlist"]
-sig = signature(curr)
+# Autosave after edits (if Sheets configured)
+sig = signature(st.session_state["watchlist"])
 prev = st.session_state.get("_watchlist_sig")
 if sheets_configured() and prev is not None and sig != prev:
     try:
-        save_watchlist_to_sheet(curr)
+        save_watchlist_to_sheet(st.session_state["watchlist"])
         st.toast("Autosaved to Google Sheets")
     except Exception as e:
         st.warning(f"Autosave failed: {e}")
 st.session_state["_watchlist_sig"] = sig
-
-
-# ---------- Autosave to Sheets after edits ----------
-curr = st.session_state["watchlist"]
-sig = signature(curr)
-prev = st.session_state.get("_watchlist_sig")
-if sheets_configured() and prev is not None and sig != prev:
-    try:
-        save_watchlist_to_sheet(curr)
-        st.toast("Autosaved to Google Sheets")
-    except Exception as e:
-        st.warning(f"Autosave failed: {e}")
-st.session_state["_watchlist_sig"] = sig
-
-# ---------- Data (prices + change) ----------
-tickers = [t for t in curr["Ticker"].unique().tolist() if t]
-prices_map = fetch_latest_prices_batched(tickers)
-view = curr.copy()
-view["Live Price"] = view["Ticker"].map(prices_map)
-
-wl_changes = day_change_pct(tickers)
-view = view.merge(wl_changes, on="Ticker", how="left")
-
-
-# ---------- Manual controls (optional) ----------
-if sheets_configured():
-    c1, c2 = st.columns([1, 1])
-    with c1:
-        if st.button("💾 Save to Sheets (manual)"):
-            save_watchlist_to_sheet(st.session_state["watchlist"])
-            st.success("Saved to Google Sheets.")
-    with c2:
-        if st.button("⬆️ Reload from Sheets"):
-            st.session_state["watchlist"] = load_watchlist_from_sheet()
-            st.session_state["_watchlist_sig"] = signature(st.session_state["watchlist"])
-            st.success("Reloaded from Google Sheets.")
-else:
-    st.info("Connect Google Sheets in Secrets to enable cloud persistence.")
-
-st.caption("Prices & daily change cached ~60s. Uses batched Yahoo Finance requests for speed.")
