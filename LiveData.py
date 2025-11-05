@@ -8,6 +8,10 @@ import yfinance as yf
 import altair as alt
 import streamlit as st
 from urllib.parse import quote, unquote
+import gspread
+from google.oauth2 import service_account
+
+
 
 # ---------- Page config ----------
 st.set_page_config(
@@ -18,6 +22,29 @@ st.set_page_config(
 )
 
 # ---------- UI helpers ----------
+@st.cache_resource
+def get_sheet_client():
+    creds_dict = json.loads(st.secrets["sheets"]["service_account"])
+    creds = service_account.Credentials.from_service_account_info(
+        creds_dict,
+        scopes=["https://www.googleapis.com/auth/spreadsheets"]
+    )
+    client = gspread.authorize(creds)
+    return client
+
+def save_watchlist_to_sheet(df: pd.DataFrame):
+    client = get_sheet_client()
+    sheet = client.open_by_key(st.secrets["sheets"]["sheet_id"]).sheet1
+    sheet.clear()
+    sheet.update([df.columns.values.tolist()] + df.values.tolist())
+    st.success("✅ Watchlist saved to Google Sheets!")
+
+def load_watchlist_from_sheet() -> pd.DataFrame:
+    client = get_sheet_client()
+    sheet = client.open_by_key(st.secrets["sheets"]["sheet_id"]).sheet1
+    data = sheet.get_all_records()
+    return pd.DataFrame(data)
+
 def colored_header_bg(title: str, bg_color: str, text_color: str = "white", font_size: int = 26):
     st.markdown(
         f"""
@@ -36,9 +63,60 @@ def colored_header_bg(title: str, bg_color: str, text_color: str = "white", font
     )
 
 # ---------- State bootstrap ----------
+# ---- 1) Bootstrap (unchanged) ----
 if "watchlist" not in st.session_state or st.session_state["watchlist"] is None:
-    # Start with an empty watchlist; drop in a few examples if you like
     st.session_state["watchlist"] = pd.DataFrame({"Ticker": ["QQQ", "AAPL", "MSFT"]})
+
+# ---- 2) Editor (make sure this comes before autosave) ----
+watch_edited = st.data_editor(
+    st.session_state["watchlist"],
+    num_rows="dynamic",
+    use_container_width=True,
+    key="watchlist_editor",
+    column_config={
+        "Ticker": st.column_config.TextColumn(
+            help="Any Yahoo Finance symbol, e.g., MSFT, ETH-USD, XAUUSD=X"
+        ),
+    },
+)
+st.session_state["watchlist"] = watch_edited
+
+# ---- 3) Autosave (after editor) ----
+def _normalize_watch_df(df: pd.DataFrame) -> pd.DataFrame:
+    out = pd.DataFrame({"Ticker": df.get("Ticker", pd.Series([], dtype=str))})
+    out["Ticker"] = out["Ticker"].astype(str).str.upper().str.strip()
+    out = out.dropna(subset=["Ticker"])
+    return out[["Ticker"]]
+
+def _signature(df: pd.DataFrame) -> int:
+    # Stable signature: tuple of cleaned tickers in order + length
+    tickers = df["Ticker"].tolist() if "Ticker" in df.columns else []
+    return hash((tuple(tickers), len(tickers)))
+
+curr = _normalize_watch_df(st.session_state["watchlist"])
+sig = _signature(curr)
+
+prev_sig = st.session_state.get("_watchlist_sig")
+
+# Only save if:
+#  - we have previous signature (i.e., not the very first run), and
+#  - the signature changed (i.e., user edited)
+should_save = prev_sig is not None and sig != prev_sig
+
+# Update signature every run
+st.session_state["_watchlist_sig"] = sig
+
+# Optional: guard if Sheets secrets not configured yet
+sheets_ready = ("sheets" in st.secrets) and ("service_account" in st.secrets["sheets"]) and ("sheet_id" in st.secrets["sheets"])
+
+if should_save and sheets_ready:
+    try:
+        save_watchlist_to_sheet(curr)
+        st.toast("Autosaved to Sheets")
+    except Exception as e:
+        st.warning(f"Autosave failed: {e}")
+
+
 
 # ---------- Price utilities ----------
 @st.cache_data(ttl=45)
@@ -171,6 +249,16 @@ st.dataframe(
     watch.style.format({"Live Price": "${:,.4f}", "Daily Change %": "{:,.2f}%"}),
     use_container_width=True,
 )
+
+c1, c2 = st.columns([1, 1])
+with c1:
+    if st.button("💾 Save to Sheets"):
+        save_watchlist_to_sheet(st.session_state["watchlist"])
+with c2:
+    if st.button("⬆️ Load from Sheets"):
+        st.session_state["watchlist"] = load_watchlist_from_sheet()
+        st.success("Loaded watchlist from Google Sheets!")
+
 
 # Optional: little note about data freshness
 st.caption("Prices and daily change cached for ~45–60 seconds to keep things snappy.")
