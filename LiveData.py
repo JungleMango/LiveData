@@ -1,5 +1,6 @@
 # LiveData.py
 import json
+import re 
 from pathlib import Path
 from typing import Dict, List
 
@@ -31,9 +32,12 @@ st.set_page_config(
 
 # ---------- UI helpers ----------
 @st.cache_resource
+
+
+
 def _assert_sheets_secrets():
     if "sheets" not in st.secrets:
-        st.error("Missing [sheets] in secrets. Add it in App → Settings → Secrets or .streamlit/secrets.toml.")
+        st.error("Missing [sheets] in secrets.")
         st.stop()
     s = st.secrets["sheets"]
     for k in ("sheet_id", "service_account"):
@@ -46,25 +50,25 @@ def get_sheet_client():
     _assert_sheets_secrets()
     raw = st.secrets["sheets"]["service_account"]
 
-    # Accept either a dict (already parsed) or a JSON string
+    # Accept dict or JSON string
     if isinstance(raw, dict):
         info = raw
     else:
-        try:
-            info = json.loads(raw)
-        except Exception as e:
-            # Helpful hint if the private_key likely has raw newlines
-            st.error(
-                "Couldn't parse service_account JSON from secrets. "
-                "Most likely the `private_key` needs `\\n` (double backslash) line breaks.\n\n"
-                "Fix in secrets: replace every \\n in private_key with \\\\n."
+        # If the private_key contains real newlines, convert them to \\n
+        def _escape_pk_newlines(s: str) -> str:
+            # Replace ONLY inside the "private_key": " ... " field
+            return re.sub(
+                r'("private_key"\s*:\s*")([^"]+?)(")',
+                lambda m: m.group(1) + m.group(2).replace("\n", "\\n") + m.group(3),
+                s,
+                flags=re.S,
             )
-            st.exception(e)
-            st.stop()
+
+        fixed = _escape_pk_newlines(raw)
+        info = json.loads(fixed)
 
     creds = service_account.Credentials.from_service_account_info(
-        info,
-        scopes=["https://www.googleapis.com/auth/spreadsheets"],
+        info, scopes=["https://www.googleapis.com/auth/spreadsheets"]
     )
     return gspread.authorize(creds)
 
