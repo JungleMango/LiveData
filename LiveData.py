@@ -63,6 +63,17 @@ def signature(df: pd.DataFrame) -> int:
     tickers = df["Ticker"].tolist() if "Ticker" in df.columns else []
     return hash(tuple(tickers))
 
+# --- Version-safe column config helper ---
+def TextCol_safe(**kwargs):
+    """Safe wrapper for Streamlit's TextColumn across versions."""
+    try:
+        return st.column_config.TextColumn(**kwargs)
+    except TypeError:
+        for k in ("placeholder", "required", "max_chars"):
+            kwargs.pop(k, None)
+        return st.column_config.TextColumn(**kwargs)
+
+
 # ============================
 #     GOOGLE SHEETS HELPERS
 # ============================
@@ -341,7 +352,7 @@ chart_col = LineChartColumn() if LineChartColumn else st.column_config.ListColum
     help="Upgrade Streamlit to enable in-cell line charts for this column."
 )
 
-# Single editable table: only 'Ticker' is editable
+#editor 
 edited = st.data_editor(
     view,
     width="stretch",
@@ -349,11 +360,11 @@ edited = st.data_editor(
     num_rows="dynamic",
     column_order=["Ticker", "Name", "Live Price", "Daily Change %", "7D % Change", "30D Trend"],
     column_config={
-        "Ticker": st.column_config.TextColumn(
+        "Ticker": TextCol_safe(
             help="Enter any Yahoo Finance symbol, e.g., MSFT, ETH-USD, XAUUSD=X",
-            required=True,
-            max_chars=32,
-            placeholder="e.g., AAPL",
+            required=True,          # will be ignored on older versions
+            max_chars=32,           # will be ignored on older versions
+            placeholder="e.g., AAPL"
         ),
         "Name": st.column_config.TextColumn(help="Company / asset name (auto)", disabled=True),
         "Live Price": st.column_config.NumberColumn(format="$%.4f"),
@@ -361,20 +372,5 @@ edited = st.data_editor(
         "7D % Change": st.column_config.NumberColumn(format="%.2f%%"),
         "30D Trend": chart_col,
     },
-    # lock everything except Ticker
     disabled=["Name", "Live Price", "Daily Change %", "7D % Change", "30D Trend"],
 )
-
-# Persist only Ticker back to state (the rest are computed)
-st.session_state["watchlist"] = normalize_watch_df(edited[["Ticker"]])
-
-# Autosave after edits (if Sheets configured)
-sig  = signature(st.session_state["watchlist"])
-prev = st.session_state.get("_watchlist_sig")
-if sheets_configured() and prev is not None and sig != prev:
-    try:
-        save_watchlist_to_sheet(st.session_state["watchlist"])
-        st.toast("Autosaved to Google Sheets")
-    except Exception as e:
-        st.warning(f"Autosave failed: {e}")
-st.session_state["_watchlist_sig"] = sig
