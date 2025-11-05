@@ -309,10 +309,6 @@ view["Live Price"] = view["Ticker"].map(prices_map)
 wl_changes = day_change_pct(tickers)
 view = view.merge(wl_changes, on="Ticker", how="left")
 
-st.dataframe(
-    view.style.format({"Live Price": "${:,.4f}", "Daily Change %": "{:,.2f}%"}),
-    width="stretch",
-)
 
 # ---------- Manual controls (optional) ----------
 if sheets_configured():
