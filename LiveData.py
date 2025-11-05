@@ -23,7 +23,24 @@ st.set_page_config(
 
 # ---------- UI helpers ----------
 @st.cache_resource
+def fetch_latest_prices(tickers):
+    """Fetch the most recent closing price for a list of tickers."""
+    prices = {}
+    if not tickers:
+        return prices
 
+    for t in tickers:
+        try:
+            data = yf.Ticker(t).history(period="1d")
+            if not data.empty:
+                prices[t] = float(data["Close"].iloc[-1])
+            else:
+                prices[t] = None
+        except Exception as e:
+            prices[t] = None
+            print(f"Error fetching {t}: {e}")
+
+    return prices
 
 def _assert_sheets_secrets():
     if "sheets" not in st.secrets:
