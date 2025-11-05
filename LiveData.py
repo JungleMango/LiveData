@@ -312,24 +312,22 @@ if "watchlist" not in st.session_state:
 # ============================
 colored_header_bg("👀 Watchlist", "#8A2BE2", "white", 26)
 
-# Build computed columns
+# Build base + normalize
 curr = normalize_watch_df(st.session_state["watchlist"])
 tickers = [t for t in curr["Ticker"].unique().tolist() if t]
 
+# --- 1️⃣ Fetch data ---
 prices_map = fetch_latest_prices_batched(tickers)
-changes_df = day_change_pct(tickers)  # ["Ticker","Daily Change %"]
-
-# History for 7D% and 30D sparkline
+changes_df = day_change_pct(tickers)
 hist_map = recent_history(tickers, days=60)
 
+# --- 2️⃣ Compute additional metrics ---
 def _pct_7d(series: pd.Series):
     if series is None or series.empty or len(series) < 8:
         return None
     last = float(series.iloc[-1])
-    prev = float(series.iloc[-8])  # ~7 trading sessions ago
-    if prev == 0:
-        return None
-    return round((last / prev - 1) * 100, 2)
+    prev = float(series.iloc[-8])
+    return round((last / prev - 1) * 100, 2) if prev else None
 
 def _last_30(series: pd.Series):
     if series is None or series.empty:
@@ -339,24 +337,39 @@ def _last_30(series: pd.Series):
 map_7d = {t: _pct_7d(hist_map.get(t)) for t in tickers}
 map_30 = {t: _last_30(hist_map.get(t)) for t in tickers}
 
-# Compose view
+# --- 3️⃣ Fetch Ticker Names (Yahoo metadata) ---
+@st.cache_data(ttl=600)
+def fetch_ticker_names(tickers: List[str]) -> Dict[str, str]:
+    names = {}
+    for t in tickers:
+        try:
+            info = yf.Ticker(t).info
+            name = info.get("shortName") or info.get("longName") or info.get("name") or ""
+            names[t] = name
+        except Exception:
+            names[t] = ""
+    return names
+
+name_map = fetch_ticker_names(tickers)
+
+# --- 4️⃣ Compose table view ---
 view = curr.copy()
+view["Name"] = view["Ticker"].map(name_map)
 view["Live Price"] = view["Ticker"].map(prices_map)
 view = view.merge(changes_df, on="Ticker", how="left")
 view["7D % Change"] = view["Ticker"].map(map_7d)
-view["30D Trend"]   = view["Ticker"].map(map_30)
+view["30D Trend"] = view["Ticker"].map(map_30)
 
-# Build a version-safe chart column config
+# --- 5️⃣ Safe sparkline setup ---
 LineChartColumn = getattr(st.column_config, "LineChartColumn", None)
 if LineChartColumn is not None:
-    chart_col = LineChartColumn()  # keep defaults; older versions may not accept y_min/y_max
+    chart_col = LineChartColumn()
 else:
-    # Fallback for older Streamlit: show the numbers as a list, with a hint to upgrade
     chart_col = st.column_config.ListColumn(
-        help="Upgrade Streamlit to enable in-cell line charts for this column."
+        help="Upgrade Streamlit to enable inline charts."
     )
 
-# Single editable table; only Ticker is editable.
+# --- 6️⃣ Single editable table (Ticker editable only) ---
 edited = st.data_editor(
     view,
     width="stretch",
@@ -364,21 +377,20 @@ edited = st.data_editor(
     num_rows="dynamic",
     column_config={
         "Ticker": st.column_config.TextColumn(
-            help="Any Yahoo Finance symbol, e.g., MSFT, ETH-USD, XAUUSD=X"
+            help="Yahoo Finance symbol, e.g., MSFT, ETH-USD, XAUUSD=X"
         ),
+        "Name": st.column_config.TextColumn(help="Company / Asset name", disabled=True),
         "Live Price": st.column_config.NumberColumn(format="$%.4f"),
         "Daily Change %": st.column_config.NumberColumn(format="%.2f%%"),
         "7D % Change": st.column_config.NumberColumn(format="%.2f%%"),
         "30D Trend": chart_col,
     },
-    # Mark computed columns as read-only in a version-stable way
-    disabled=["Live Price", "Daily Change %", "7D % Change", "30D Trend"],
+    disabled=["Name", "Live Price", "Daily Change %", "7D % Change", "30D Trend"],
 )
 
-# Persist only Ticker back to state
+# --- 7️⃣ Persist and autosave ---
 st.session_state["watchlist"] = normalize_watch_df(edited[["Ticker"]])
 
-# Autosave after edits (if Sheets configured)
 sig = signature(st.session_state["watchlist"])
 prev = st.session_state.get("_watchlist_sig")
 if sheets_configured() and prev is not None and sig != prev:
