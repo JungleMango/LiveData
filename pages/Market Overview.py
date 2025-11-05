@@ -1,5 +1,12 @@
 import streamlit as st
 
+# streamlit_app/pages/01_Markets.py
+# ----------------------------------
+# 👇 This comment controls how the page appears in the sidebar:
+# Page title: Market Overview
+# Page icon: 📊
+
+
 st.set_page_config(page_title="Market Overview",
                    page_icon="📊",
                    layout="wide",
