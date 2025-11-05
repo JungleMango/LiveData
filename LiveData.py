@@ -218,7 +218,6 @@ watch_edited = st.data_editor(
     st.session_state["watchlist"],
     num_rows="dynamic",
     use_container_width=True,
-    key="watchlist_editor",
     column_config={
         "Ticker": st.column_config.TextColumn(
             help="Any Yahoo Finance symbol, e.g., MSFT, ETH-USD, XAUUSD=X"
