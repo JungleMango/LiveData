@@ -5,8 +5,8 @@ import plotly.express as px
 
 st.set_page_config(page_title="NVIDIA Revenue Dashboard", layout="wide")
 
-st.title("🟩 NVIDIA Revenue Dashboard")
-st.caption("Q2 FY2026 snapshot with geographic mix, guidance, and China/export context.")
+st.title(" NVIDIA Revenue Dashboard")
+st.caption("Q2 FY2026 snapshot")
 
 # ---------- Data (edit here if you need) ----------
 # Streams: your numbers
@@ -105,7 +105,3 @@ st.markdown(
     "(e.g., constrained GB300 shipments to the UAE despite limited licenses)."
 )
 
-st.caption(
-    "Tip: To control how this page appears in the sidebar, use a filename like "
-    "`02_📊_NVIDIA_Revenue.py` in the `pages/` folder. The emoji/text become the sidebar label."
-)
