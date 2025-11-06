@@ -4,4 +4,4 @@ streamlit-autorefresh
 pandas
 gspread
 google-auth
-matplotlib.pyplot
+matplotlib
