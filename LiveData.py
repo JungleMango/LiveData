@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 
 import streamlit as st
 
-# ---------- Page config ----------
+# ---------- Page config ----------. L?.
 st.set_page_config(
     page_title="Live Data — Home",
     page_icon="🏠",

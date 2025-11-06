@@ -1,13 +1,12 @@
-# LiveData.py — optimized watchlist with fast batched fetch + safe Sheets I/O
+# LiveData.py — optimized watchlist with fast batched fetch + safe Sheets I/O + 2-dec ceil rounding
 
-import json, re, time
+import json, re, time, math
 from typing import Dict, List
 import pandas as pd
 import yfinance as yf
 import streamlit as st
 import gspread
 from google.oauth2 import service_account
-import math
 
 # ============================
 #            CONFIG
@@ -32,7 +31,7 @@ st.markdown("""
 SHEET_TAB_NAME = "Watchlist"  # worksheet name inside your Google Sheet
 
 # ============================
-#         UI HELPERS
+#         UI / UTIL
 # ============================
 def colored_header_bg(title: str, bg_color: str, text_color: str = "white", font_size: int = 26):
     st.markdown(
@@ -64,6 +63,15 @@ def signature(df: pd.DataFrame) -> int:
 def _tickers_norm(tickers: List[str]) -> List[str]:
     return [t for t in pd.unique(pd.Series(tickers).astype(str).str.upper().str.strip()) if t]
 
+def round2_up(value):
+    """Round up to 2 decimal places (ceil style)."""
+    try:
+        if pd.isna(value):
+            return None
+        return math.ceil(float(value) * 100) / 100.0
+    except Exception:
+        return None
+
 # ============================
 #     GOOGLE SHEETS HELPERS
 # ============================
@@ -85,7 +93,7 @@ def get_sheet_client():
     if isinstance(raw, dict):
         info = raw
     else:
-            # Escape real newlines inside the private_key ONLY (common paste issue)
+        # Escape real newlines inside the private_key ONLY (common paste issue)
         def _escape_pk_newlines(s: str) -> str:
             return re.sub(
                 r'("private_key"\s*:\s*")([^"]+?)(")',
@@ -193,7 +201,8 @@ def fetch_watch_batched(tickers: List[str], days: int = 60, _key: str = ""):
         if frame is None or frame.empty: return
         s = frame["Close"].dropna()
         if s.empty: return
-        result["history"][t] = s.tail(days)
+        s = s.tail(days)  # trim early
+        result["history"][t] = s
         result["last_price"][t] = float(s.iloc[-1])
         if len(s) >= 2:
             result["prev_close"][t] = float(s.iloc[-2])
@@ -219,15 +228,6 @@ def fetch_names_fast(tickers: List[str]) -> Dict[str, str]:
             pass
         names[t] = name
     return names
-
-def round2_up(value):
-    """Round up to 2 decimal places (ceil style)."""
-    try:
-        if pd.isna(value):
-            return None
-        return math.ceil(float(value) * 100) / 100.0
-    except Exception:
-        return None
 
 # ============================
 #     SESSION BOOTSTRAP
@@ -272,14 +272,13 @@ last_price = bundle["last_price"]
 prev_close = bundle["prev_close"]
 history    = bundle["history"]
 
-# Derived metrics (no extra network)
+# Derived metrics (local, rounded up to 2dp)
 def _pct_7d(s: pd.Series):
     if s is None or s.empty or len(s) < 8: return None
     return round2_up((float(s.iloc[-1]) / float(s.iloc[-8]) - 1) * 100)
 
-
 def _last_30(s: pd.Series):
-    return [] if s is None or s.empty else [float(x) for x in s.tail(30).tolist()]
+    return [] if s is None or s.empty else [round2_up(x) for x in s.tail(30).tolist()]
 
 changes_rows = []
 for t in tickers:
@@ -297,7 +296,7 @@ name_map = fetch_names_fast(tickers)
 # --- Compose table view ---
 view = curr.copy()
 view["Name"] = view["Ticker"].map(name_map)
-view["Live Price"] = view["Ticker"].map(last_price)
+view["Live Price"] = view["Ticker"].map(last_price).apply(round2_up)
 view = view.merge(changes_df, on="Ticker", how="left")
 view["7D % Change"] = view["Ticker"].map(map_7d)
 view["30D Trend"] = view["Ticker"].map(map_30)
@@ -319,7 +318,7 @@ edited = st.data_editor(
             help="Yahoo Finance symbol, e.g., MSFT, ETH-USD, XAUUSD=X"
         ),
         "Name": st.column_config.TextColumn(help="Company / Asset name", disabled=True),
-        "Live Price": st.column_config.NumberColumn(format="$%.4f"),
+        "Live Price": st.column_config.NumberColumn(format="$%.2f"),
         "Daily Change %": st.column_config.NumberColumn(format="%.2f%%"),
         "7D % Change": st.column_config.NumberColumn(format="%.2f%%"),
         "30D Trend": chart_col,
@@ -357,11 +356,6 @@ with c3:
 # ============================
 #          AUTOSAVE SAFE
 # ============================
-# Only autosave if:
-# - Sheets configured
-# - Data changed vs last saved signature
-# - Not empty
-# - Not within 1.5s of a live edit (debounce)
 current_sig = signature(st.session_state["watchlist"])
 last_saved_sig = st.session_state.get("watchlist_saved_sig")
 if (
