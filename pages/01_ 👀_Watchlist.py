@@ -7,6 +7,7 @@ import yfinance as yf
 import streamlit as st
 import gspread
 from google.oauth2 import service_account
+import math
 
 # ============================
 #            CONFIG
@@ -219,6 +220,15 @@ def fetch_names_fast(tickers: List[str]) -> Dict[str, str]:
         names[t] = name
     return names
 
+def round2_up(value):
+    """Round up to 2 decimal places (ceil style)."""
+    try:
+        if pd.isna(value):
+            return None
+        return math.ceil(float(value) * 100) / 100.0
+    except Exception:
+        return None
+
 # ============================
 #     SESSION BOOTSTRAP
 # ============================
@@ -265,7 +275,8 @@ history    = bundle["history"]
 # Derived metrics (no extra network)
 def _pct_7d(s: pd.Series):
     if s is None or s.empty or len(s) < 8: return None
-    return round((float(s.iloc[-1]) / float(s.iloc[-8]) - 1) * 100, 2)
+    return round2_up((float(s.iloc[-1]) / float(s.iloc[-8]) - 1) * 100)
+
 
 def _last_30(s: pd.Series):
     return [] if s is None or s.empty else [float(x) for x in s.tail(30).tolist()]
@@ -273,7 +284,7 @@ def _last_30(s: pd.Series):
 changes_rows = []
 for t in tickers:
     p0, p1 = prev_close.get(t), last_price.get(t)
-    chg = round((p1/p0 - 1)*100, 2) if (p0 and p1) else None
+    chg = round2_up((p1/p0 - 1)*100) if (p0 and p1) else None
     changes_rows.append({"Ticker": t, "Daily Change %": chg})
 changes_df = pd.DataFrame(changes_rows)
 
