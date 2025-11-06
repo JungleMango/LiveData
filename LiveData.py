@@ -433,14 +433,20 @@ edited = st.data_editor(
 )
 
 # --- 7️⃣ Persist and autosave ---
+# Persist in-memory
 st.session_state["watchlist"] = normalize_watch_df(edited[["Ticker"]])
 
-sig = signature(st.session_state["watchlist"])
-prev = st.session_state.get("_watchlist_sig")
-if sheets_configured() and prev is not None and sig != prev:
-    try:
-        save_watchlist_to_sheet(st.session_state["watchlist"])
-        st.toast("Autosaved to Google Sheets")
-    except Exception as e:
-        st.warning(f"Autosave failed: {e}")
-st.session_state["_watchlist_sig"] = sig
+# Compute signatures
+current_sig   = signature(st.session_state["watchlist"])
+last_saved_sig = st.session_state.get("watchlist_saved_sig")
+
+# Debounce: only attempt autosave if configured, we have a previous saved sig, and the data really changed
+if sheets_configured() and last_saved_sig is not None and current_sig != last_saved_sig:
+    # Protect against accidental wipes: do NOT save if the new table is empty
+    if st.session_state["watchlist"].empty:
+        st.info("Changes detected, but the watchlist is empty — autosave skipped to protect the sheet.")
+    else:
+        if save_watchlist_to_sheet(st.session_state["watchlist"], prevent_empty=True):
+            st.toast("Autosaved to Google Sheets")
+            st.session_state["watchlist_saved_sig"] = current_sig
+
