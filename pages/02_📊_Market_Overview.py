@@ -1,86 +1,111 @@
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend, BarChart, Bar, XAxis, YAxis } from "recharts";
-import { Globe, Cpu, Monitor } from "lucide-react";
+# 02_📊_NVIDIA_Revenue.py
+import streamlit as st
+import pandas as pd
+import plotly.express as px
 
-export default function NvidiaRevenueDashboard() {
-  const COLORS = ["#10b981", "#3b82f6", "#f59e0b", "#ef4444", "#6366f1"];
+st.set_page_config(page_title="NVIDIA Revenue Dashboard", layout="wide")
 
-  const revenueStreams = [
-    { name: "Compute & Networking", value: 89 },
-    { name: "Graphics", value: 11 }
-  ];
+st.title("🟩 NVIDIA Revenue Dashboard")
+st.caption("Q2 FY2026 snapshot with geographic mix, guidance, and China/export context.")
 
-  const regionalRevenue = [
-    { region: "United States", value: 46 },
-    { region: "Singapore", value: 18 },
-    { region: "Taiwan", value: 15 },
-    { region: "China", value: 13 },
-    { region: "Other (incl. EU)", value: 6 }
-  ];
+# ---------- Data (edit here if you need) ----------
+# Streams: your numbers
+streams = pd.DataFrame([
+    {"Stream": "Compute & Networking", "Share": 89},
+    {"Stream": "Graphics",             "Share": 11},
+])
 
-  return (
-    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 p-6">
-      {/* Revenue Streams */}
-      <Card className="shadow-lg rounded-2xl">
-        <CardHeader className="flex items-center gap-2">
-          <Cpu className="text-emerald-500" />
-          <CardTitle>Revenue Streams (Q2 FY2026)</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <ResponsiveContainer width="100%" height={300}>
-            <PieChart>
-              <Pie data={revenueStreams} cx="50%" cy="50%" labelLine={false} label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`} outerRadius={100} dataKey="value">
-                {revenueStreams.map((entry, index) => (
-                  <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                ))}
-              </Pie>
-              <Tooltip />
-              <Legend />
-            </PieChart>
-          </ResponsiveContainer>
-          <p className="text-sm text-gray-500 mt-2">
-            Compute & Networking drives nearly 90% of NVIDIA’s revenue, led by data centers, automotive, and DGX Cloud.
-          </p>
-        </CardContent>
-      </Card>
+# Regions: your numbers
+regions = pd.DataFrame([
+    {"Region": "United States",   "Share": 46},
+    {"Region": "Singapore",       "Share": 18},
+    {"Region": "Taiwan",          "Share": 15},
+    {"Region": "China",           "Share": 13},
+    {"Region": "Other (incl. EU)","Share": 6},
+])
 
-      {/* Revenue by Region */}
-      <Card className="shadow-lg rounded-2xl">
-        <CardHeader className="flex items-center gap-2">
-          <Globe className="text-blue-500" />
-          <CardTitle>Revenue by Country</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <ResponsiveContainer width="100%" height={300}>
-            <BarChart data={regionalRevenue}>
-              <XAxis dataKey="region" tick={{ fontSize: 12 }} interval={0} angle={-20} dy={10} />
-              <YAxis />
-              <Tooltip />
-              <Legend />
-              <Bar dataKey="value" fill="#3b82f6" radius={[8, 8, 0, 0]} />
-            </BarChart>
-          </ResponsiveContainer>
-          <p className="text-sm text-gray-500 mt-2">
-            U.S. remains the dominant source (46%) followed by Singapore (18%) and Taiwan (15%). China contributes 13%, while Europe is under 6% despite growing AI infrastructure projects.
-          </p>
-        </CardContent>
-      </Card>
+# Optional comparison toggle (dummy Q1 vs Q2 for charts)
+qoq = st.toggle("Show QoQ comparison (Q1 vs Q2 FY2026)", value=False)
 
-      {/* Narrative Section */}
-      <Card className="col-span-1 lg:col-span-2 shadow-lg rounded-2xl">
-        <CardHeader className="flex items-center gap-2">
-          <Monitor className="text-indigo-500" />
-          <CardTitle>Market Outlook & Risks</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <p className="text-gray-700 leading-relaxed">
-            NVIDIA projects next-quarter revenue of <strong>$54 billion ± 2%</strong>, excluding any H20 chip shipments to China. Despite export restrictions, the company is expanding AI infrastructure collaborations with <strong>France, Germany, Italy, Spain, and the U.K.</strong> to build the world’s first <strong>industrial AI cloud</strong> for European manufacturing.
-          </p>
-          <p className="text-gray-700 leading-relaxed mt-3">
-            CEO Jensen Huang noted, “<em>China is nanoseconds behind America in AI. It’s vital that America wins by racing ahead and winning developers worldwide.</em>” Still, NVIDIA estimates up to <strong>$15 billion</strong> in lost sales due to China export controls. China remains the company’s <strong>4th-largest market (~$17 billion in FY2025)</strong>, underscoring significant geopolitical risk.
-          </p>
-        </CardContent>
-      </Card>
-    </div>
-  );
-}
+if qoq:
+    # Example QoQ figures (adjust if you have exacts)
+    streams_qoq = pd.DataFrame([
+        {"Quarter": "Q1 FY26", "Stream": "Compute & Networking", "Share": 88},
+        {"Quarter": "Q1 FY26", "Stream": "Graphics",             "Share": 12},
+        {"Quarter": "Q2 FY26", "Stream": "Compute & Networking", "Share": 89},
+        {"Quarter": "Q2 FY26", "Stream": "Graphics",             "Share": 11},
+    ])
+    regions_qoq = pd.DataFrame([
+        {"Quarter": "Q1 FY26", "Region": "United States",    "Share": 45},
+        {"Quarter": "Q1 FY26", "Region": "Singapore",        "Share": 18},
+        {"Quarter": "Q1 FY26", "Region": "Taiwan",           "Share": 15},
+        {"Quarter": "Q1 FY26", "Region": "China",            "Share": 14},
+        {"Quarter": "Q1 FY26", "Region": "Other (incl. EU)", "Share": 8},
+        {"Quarter": "Q2 FY26", "Region": "United States",    "Share": 46},
+        {"Quarter": "Q2 FY26", "Region": "Singapore",        "Share": 18},
+        {"Quarter": "Q2 FY26", "Region": "Taiwan",           "Share": 15},
+        {"Quarter": "Q2 FY26", "Region": "China",            "Share": 13},
+        {"Quarter": "Q2 FY26", "Region": "Other (incl. EU)", "Share": 6},
+    ])
+
+# ---------- Layout ----------
+col1, col2 = st.columns(2, gap="large")
+
+with col1:
+    st.subheader("Revenue Streams (Q2 FY2026)")
+    if qoq:
+        fig_streams = px.bar(
+            streams_qoq, x="Stream", y="Share", color="Quarter", barmode="group",
+            text="Share", labels={"Share": "% of Revenue"}, height=380
+        )
+    else:
+        fig_streams = px.pie(
+            streams, names="Stream", values="Share", hole=0.35,
+            height=380
+        )
+        fig_streams.update_traces(textposition="inside", textinfo="percent+label")
+    st.plotly_chart(fig_streams, use_container_width=True)
+    st.markdown(
+        "Compute & Networking is the **core driver (~89%)**: Data Center, Automotive, Jetson, and DGX Cloud. "
+        "Graphics is **~11%**, buoyed by GeForce/RTX and Omniverse."
+    )
+
+with col2:
+    st.subheader("Revenue by Country")
+    if qoq:
+        fig_regions = px.bar(
+            regions_qoq, x="Region", y="Share", color="Quarter", barmode="group",
+            text="Share", labels={"Share": "% of Revenue"}, height=380
+        )
+    else:
+        fig_regions = px.bar(
+            regions, x="Region", y="Share", text="Share",
+            labels={"Share": "% of Revenue"}, height=380
+        )
+    fig_regions.update_layout(xaxis_tickangle=-20)
+    st.plotly_chart(fig_regions, use_container_width=True)
+    st.markdown(
+        "🇺🇸 **US ~46%** | 🇸🇬 Singapore **18%** | 🇹🇼 Taiwan **15%** | 🇨🇳 China **13%** | 🌍 Other (incl. EU) **6%**"
+    )
+
+# ---------- Narrative / Guidance ----------
+st.divider()
+st.subheader("Guidance & Regional Developments")
+st.markdown(
+    "- **Guidance:** Next-quarter revenue **~$54.0B ±2%**. Outlook assumes **no H20 shipments to China**.\n"
+    "- **Europe:** Partnering with **France, Germany, Italy, Spain, and the U.K.** on **Blackwell AI infrastructure** "
+    "including the *first industrial AI cloud for European manufacturers* — despite Europe currently contributing **<6%**."
+)
+
+st.subheader("Geopolitics & Export Controls")
+st.markdown(
+    "> “China is nanoseconds behind America in AI. It’s vital that America wins by racing ahead and winning developers worldwide.” — **Jensen Huang**\n\n"
+    "- NVIDIA has indicated China restrictions are **“deeply painful,”** estimating up to **$15B** potential annual sales impact.\n"
+    "- China is still material (≈ **$17B**, FY2025 est.) and remains a key risk factor alongside **Middle East** export limits "
+    "(e.g., constrained GB300 shipments to the UAE despite limited licenses)."
+)
+
+st.caption(
+    "Tip: To control how this page appears in the sidebar, use a filename like "
+    "`02_📊_NVIDIA_Revenue.py` in the `pages/` folder. The emoji/text become the sidebar label."
+)
