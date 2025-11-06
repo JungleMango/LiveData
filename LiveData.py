@@ -32,7 +32,7 @@ with st.sidebar:
 
 # ---------- Header ----------
 st.title("🏠 Live Data Dashboard — Home")
-st.caption("A lightweight landing page for your live data app")
+st.caption("Either you make it or loose it all, choice is yours, luck is not")
 
 # ---------- Status/KPI row (placeholders you can wire up) ----------
 kpi1, kpi2, kpi3, kpi4 = st.columns(4)
