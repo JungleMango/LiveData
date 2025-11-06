@@ -77,6 +77,24 @@ def TextCol_safe(**kwargs):
 # ============================
 #     GOOGLE SHEETS HELPERS
 # ============================
+
+def get_sheet_snapshot() -> pd.DataFrame:
+    """Read current tickers from the sheet (robust, normalized)."""
+    try:
+        client = get_sheet_client()
+        ws = _open_or_create_worksheet(client, st.secrets["sheets"]["sheet_id"], SHEET_TAB_NAME)
+        values = ws.get_all_values()
+        if not values:
+            return pd.DataFrame({"Ticker": []})
+        header, *rows = values
+        if "Ticker" not in header:
+            tickers = [r[0] for r in rows if r]
+            return normalize_watch_df(pd.DataFrame({"Ticker": tickers}))
+        df = pd.DataFrame(rows, columns=header)
+        return normalize_watch_df(df)
+    except Exception:
+        return pd.DataFrame({"Ticker": []})
+    
 def _assert_sheets_secrets():
     if "sheets" not in st.secrets:
         st.error("Missing [sheets] in secrets (App → Settings → Secrets, or .streamlit/secrets.toml).")
@@ -120,14 +138,31 @@ def _open_or_create_worksheet(client: gspread.Client, sheet_id: str, tab_name: s
         ws.update("A1", [["Ticker"]])
     return ws
 
-def save_watchlist_to_sheet(df: pd.DataFrame):
+
+def save_watchlist_to_sheet(df: pd.DataFrame, prevent_empty: bool = True) -> bool:
+    """
+    Safely write tickers to column A.
+    - Skips saving if df is empty (to avoid hard reset).
+    - Only clears A2:A (keeps header/other columns intact).
+    Returns True if saved, False if skipped.
+    """
+    clean = normalize_watch_df(df)
+
+    if prevent_empty and clean.empty:
+        st.warning("Skipped autosave: watchlist is empty (refusing to overwrite the sheet).")
+        return False
+
     client = get_sheet_client()
     ws = _open_or_create_worksheet(client, st.secrets["sheets"]["sheet_id"], SHEET_TAB_NAME)
-    clean = normalize_watch_df(df)
-    ws.clear()
-    values = [clean.columns.tolist()] + clean.values.tolist() if not clean.empty else [["Ticker"]]
-    ws.update("A1", values)
-    st.success(f"✅ Saved {0 if clean.empty else len(clean)} tickers to Google Sheets ({SHEET_TAB_NAME}).")
+
+    # header + data rows
+    data = [["Ticker"]] + [[t] for t in clean["Ticker"].tolist()]
+
+    # Clear only the data rows in column A (A2:A), not the whole worksheet
+    try:
+        ws.batch_clear(["A2:A"])
+    except Exception:
+        pass
 
 def load_watchlist_from_sheet() -> pd.DataFrame:
     client = get_sheet_client()
@@ -305,7 +340,16 @@ if "watchlist" not in st.session_state:
         st.session_state["_watchlist_sig"] = None
     except Exception:
         st.session_state["watchlist"] = pd.DataFrame({"Ticker": ["QQQ", "AAPL", "MSFT"]})
+
+        # Initialize "last saved" signature from the sheet
+if "watchlist_saved_sig" not in st.session_state:
+    try:
+        current_on_sheet = get_sheet_snapshot()
+        st.session_state["watchlist_saved_sig"] = signature(current_on_sheet)
+    except Exception:
+        st.session_state["watchlist_saved_sig"] = signature(st.session_state["watchlist"])
         st.session_state["_watchlist_sig"] = None
+
 
 # ============================
 #         WATCHLIST UI
