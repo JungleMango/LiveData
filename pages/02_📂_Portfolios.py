@@ -1,16 +1,19 @@
-
-# Live Portfolio Tracker — local JSON persistence + optimized quotes
+"""Portfolio page with Google Sheets persistence (fallbacks to local JSON)."""
 
 import json
 import math
+import re
+import secrets
 import time
 import concurrent.futures as cf
 from pathlib import Path
-from typing import Dict, List, Tuple
+from typing import Dict, List, Optional, Tuple
 
 import pandas as pd
 import streamlit as st
 import yfinance as yf
+import gspread
+from google.oauth2 import service_account
 
 # ============================
 #            CONFIG
@@ -42,6 +45,8 @@ DEFAULT_PORTFOLIO_TEMPLATE = [{
     "Notes": "Sample",
     "Last Updated": "",
 }]
+SHEET_INDEX_TAB = "Portfolios_Index"
+SHEET_TITLE_PREFIX = "PF"
 PORTFOLIO_FILE = Path(__file__).resolve().parent.parent / "portfolios.json"
 
 st.markdown(
@@ -57,13 +62,251 @@ st.markdown(
 )
 
 # ============================
-#      LOCAL PORTFOLIO I/O
+#        SHEETS / STORAGE
 # ============================
+def sheets_configured() -> bool:
+    try:
+        s = st.secrets["sheets"]
+        return bool(s.get("sheet_id")) and bool(s.get("service_account"))
+    except Exception:
+        return False
+
+
+def _assert_sheets_secrets() -> None:
+    if "sheets" not in st.secrets:
+        st.error("Missing [sheets] configuration (App → Settings → Secrets).")
+        st.stop()
+    for key in ("sheet_id", "service_account"):
+        if key not in st.secrets["sheets"]:
+            st.error(f"Missing key in [sheets]: {key}")
+            st.stop()
+
+
+@st.cache_resource(show_spinner=False)
+def get_sheet_client() -> gspread.Client:
+    _assert_sheets_secrets()
+    raw = st.secrets["sheets"]["service_account"]
+    if isinstance(raw, dict):
+        info = raw
+    else:
+        def _escape_pk_newlines(s: str) -> str:
+            return re.sub(
+                r'(\"private_key\"\s*:\s*\")([^\"]+?)(\")',
+                lambda m: m.group(1) + m.group(2).replace("\n", "\\n") + m.group(3),
+                s,
+                flags=re.S,
+            )
+
+        info = json.loads(_escape_pk_newlines(raw))
+
+    creds = service_account.Credentials.from_service_account_info(
+        info, scopes=["https://www.googleapis.com/auth/spreadsheets"]
+    )
+    return gspread.authorize(creds)
+
+
+@st.cache_resource(show_spinner=False)
+def get_spreadsheet() -> gspread.Spreadsheet:
+    client = get_sheet_client()
+    return client.open_by_key(st.secrets["sheets"]["sheet_id"])
+
+
+def _open_or_create_index_ws(spreadsheet: gspread.Spreadsheet) -> gspread.Worksheet:
+    try:
+        ws = spreadsheet.worksheet(SHEET_INDEX_TAB)
+    except gspread.exceptions.WorksheetNotFound:
+        ws = spreadsheet.add_worksheet(title=SHEET_INDEX_TAB, rows=1000, cols=3)
+        ws.update("A1:C1", [["Name", "SheetID", "Title"]])
+        return ws
+
+    header = ws.row_values(1)
+    if header[:3] != ["Name", "SheetID", "Title"]:
+        ws.update("A1:C1", [["Name", "SheetID", "Title"]])
+    return ws
+
+
+def _col_letter(idx: int) -> str:
+    result = ""
+    n = idx
+    while n > 0:
+        n, rem = divmod(n - 1, 26)
+        result = chr(65 + rem) + result
+    return result or "A"
+
+
+def _generate_sheet_title(name: str) -> str:
+    cleaned = re.sub(r"[\\/:?*\[\]]", " ", name).strip()
+    cleaned = re.sub(r"\s+", " ", cleaned)
+    base = cleaned or "Portfolio"
+    suffix = secrets.token_hex(2)
+    title = f"{SHEET_TITLE_PREFIX} - {base} {suffix}"
+    return title[:100]
+
+
+def _get_index_records() -> List[Dict[str, str]]:
+    try:
+        spreadsheet = get_spreadsheet()
+        ws = _open_or_create_index_ws(spreadsheet)
+        values = ws.get_all_values()
+    except Exception:
+        return []
+
+    if not values:
+        return []
+
+    header, *rows = values
+    records: List[Dict[str, str]] = []
+    for idx, row in enumerate(rows, start=2):
+        if not row:
+            continue
+        name = row[0].strip() if len(row) > 0 else ""
+        sheet_id = row[1].strip() if len(row) > 1 else ""
+        title = row[2].strip() if len(row) > 2 else ""
+        if not name:
+            continue
+        records.append({"name": name, "sheet_id": sheet_id, "title": title, "row": idx})
+    return records
+
+
+def _ensure_default_portfolio_records() -> List[Dict[str, str]]:
+    records = _get_index_records()
+    if records:
+        return records
+
+    created = _create_portfolio_sheet(DEFAULT_PORTFOLIO_NAME)
+    if created:
+        df = pd.DataFrame(DEFAULT_PORTFOLIO_TEMPLATE)
+        write_portfolio(DEFAULT_PORTFOLIO_NAME, df, prevent_empty=False)
+    return _get_index_records()
+
+
+def _get_portfolio_record(name: str) -> Optional[Dict[str, str]]:
+    records = _ensure_default_portfolio_records()
+    for record in records:
+        if record["name"] == name:
+            return record
+    return None
+
+
+def _create_portfolio_sheet(name: str, initial_rows: Optional[List[Dict[str, object]]] = None) -> bool:
+    try:
+        spreadsheet = get_spreadsheet()
+        index_ws = _open_or_create_index_ws(spreadsheet)
+        records = _get_index_records()
+        if any(r["name"] == name for r in records):
+            return False
+
+        title = _generate_sheet_title(name)
+        ws = spreadsheet.add_worksheet(title=title, rows=1000, cols=len(PORTFOLIO_HEADER))
+        ws.update("A1", [PORTFOLIO_HEADER])
+        index_ws.append_row([name, str(ws.id), title])
+
+        if initial_rows:
+            df = sanitize_base(pd.DataFrame(initial_rows))
+            df = df.where(pd.notna(df), "")
+            data = [PORTFOLIO_HEADER] + df.values.tolist()
+            end_col = _col_letter(len(PORTFOLIO_HEADER))
+            ws.update(f"A1:{end_col}{len(data)}", data)
+
+        return True
+    except Exception:
+        return False
+
+
+def _list_portfolios_sheets() -> List[str]:
+    records = _ensure_default_portfolio_records()
+    return sorted(record["name"] for record in records)
+
+
+def _read_portfolio_sheets(name: str) -> pd.DataFrame:
+    record = _get_portfolio_record(name)
+    if not record:
+        return sanitize_base(pd.DataFrame(columns=PORTFOLIO_HEADER))
+
+    try:
+        spreadsheet = get_spreadsheet()
+        ws = spreadsheet.get_worksheet_by_id(int(record["sheet_id"]))
+        values = ws.get_all_values()
+    except Exception:
+        return sanitize_base(pd.DataFrame(columns=PORTFOLIO_HEADER))
+
+    if not values:
+        return sanitize_base(pd.DataFrame(columns=PORTFOLIO_HEADER))
+
+    header, *rows = values
+    if not header:
+        header = PORTFOLIO_HEADER
+    df = pd.DataFrame(rows, columns=header)
+    return sanitize_base(df)
+
+
+def _write_portfolio_sheets(
+    name: str,
+    df: pd.DataFrame,
+    prevent_empty: bool = True,
+) -> Tuple[bool, pd.DataFrame]:
+    record = _get_portfolio_record(name)
+    if not record:
+        created = _create_portfolio_sheet(name)
+        if not created:
+            st.warning("Unable to create Google Sheet tab for this portfolio.")
+            return False, df
+        record = _get_portfolio_record(name)
+        if not record:
+            return False, df
+
+    clean = _normalize(df)
+    if clean.empty:
+        if prevent_empty:
+            st.warning("Skipped save: portfolio is empty (won’t overwrite the sheet).")
+            return False, df
+        clean = sanitize_base(pd.DataFrame(columns=PORTFOLIO_HEADER))
+
+    ts = pd.Timestamp.now(tz="UTC").strftime("%Y-%m-%d %H:%M:%S UTC")
+    if not clean.empty:
+        clean.loc[:, "Last Updated"] = ts
+
+    out = clean.where(pd.notna(clean), "")
+    data = [PORTFOLIO_HEADER] + out.values.tolist() if not out.empty else [PORTFOLIO_HEADER]
+
+    try:
+        spreadsheet = get_spreadsheet()
+        ws = spreadsheet.get_worksheet_by_id(int(record["sheet_id"]))
+        ws.clear()
+        end_col = _col_letter(len(PORTFOLIO_HEADER))
+        ws.update(f"A1:{end_col}{len(data)}", data)
+    except Exception:
+        st.warning("Failed to write portfolio to Google Sheets.")
+        return False, df
+
+    return True, sanitize_base(clean)
+
+
+def _delete_portfolio_sheets(name: str) -> bool:
+    records = _get_index_records()
+    if len(records) <= 1:
+        return False
+
+    record = next((r for r in records if r["name"] == name), None)
+    if not record:
+        return False
+
+    try:
+        spreadsheet = get_spreadsheet()
+        ws = spreadsheet.get_worksheet_by_id(int(record["sheet_id"]))
+        spreadsheet.del_worksheet(ws)
+        index_ws = _open_or_create_index_ws(spreadsheet)
+        index_ws.delete_rows(record["row"])
+        return True
+    except Exception:
+        return False
+
+
 def _portfolio_store_path() -> Path:
     return PORTFOLIO_FILE
 
 
-def _load_portfolio_store() -> Dict[str, List[Dict[str, object]]]:
+def _load_local_store() -> Dict[str, List[Dict[str, object]]]:
     path = _portfolio_store_path()
     if path.exists():
         try:
@@ -78,17 +321,101 @@ def _load_portfolio_store() -> Dict[str, List[Dict[str, object]]]:
         except json.JSONDecodeError:
             pass
     default = {DEFAULT_PORTFOLIO_NAME: DEFAULT_PORTFOLIO_TEMPLATE}
-    _save_portfolio_store(default)
+    _save_local_store(default)
     return default
 
 
-def _save_portfolio_store(store: Dict[str, List[Dict[str, object]]]) -> None:
+def _save_local_store(store: Dict[str, List[Dict[str, object]]]) -> None:
     path = _portfolio_store_path()
     path.write_text(json.dumps(store, indent=2))
 
 
-def list_portfolios(store: Dict[str, List[Dict[str, object]]]) -> List[str]:
+def _list_portfolios_local() -> List[str]:
+    store = _load_local_store()
     return sorted(store.keys())
+
+
+def _read_portfolio_local(name: str) -> pd.DataFrame:
+    store = _load_local_store()
+    rows = store.get(name, [])
+    if not rows:
+        return sanitize_base(pd.DataFrame(columns=PORTFOLIO_HEADER))
+    return sanitize_base(pd.DataFrame(rows))
+
+
+def _write_portfolio_local(
+    name: str,
+    df: pd.DataFrame,
+    prevent_empty: bool = True,
+) -> Tuple[bool, pd.DataFrame]:
+    store = _load_local_store()
+    clean = _normalize(df)
+    if clean.empty:
+        if prevent_empty:
+            st.warning("Skipped save: portfolio is empty (won’t overwrite saved data).")
+            return False, df
+        store[name] = []
+        _save_local_store(store)
+        return True, sanitize_base(pd.DataFrame(columns=PORTFOLIO_HEADER))
+
+    ts = pd.Timestamp.now(tz="UTC").strftime("%Y-%m-%d %H:%M:%S UTC")
+    clean.loc[:, "Last Updated"] = ts
+    out = clean.where(pd.notna(clean), None).to_dict(orient="records")
+    store[name] = out
+    _save_local_store(store)
+    return True, sanitize_base(clean)
+
+
+def _create_portfolio_local(name: str) -> bool:
+    store = _load_local_store()
+    if name in store:
+        return False
+    store[name] = []
+    _save_local_store(store)
+    return True
+
+
+def _delete_portfolio_local(name: str) -> bool:
+    store = _load_local_store()
+    if name not in store or len(store) <= 1:
+        return False
+    store.pop(name, None)
+    _save_local_store(store)
+    return True
+
+
+def list_portfolios() -> List[str]:
+    if sheets_configured():
+        return _list_portfolios_sheets()
+    return _list_portfolios_local()
+
+
+def read_portfolio(name: str) -> pd.DataFrame:
+    if sheets_configured():
+        return _read_portfolio_sheets(name)
+    return _read_portfolio_local(name)
+
+
+def write_portfolio(
+    name: str,
+    df: pd.DataFrame,
+    prevent_empty: bool = True,
+) -> Tuple[bool, pd.DataFrame]:
+    if sheets_configured():
+        return _write_portfolio_sheets(name, df, prevent_empty=prevent_empty)
+    return _write_portfolio_local(name, df, prevent_empty=prevent_empty)
+
+
+def create_portfolio(name: str) -> bool:
+    if sheets_configured():
+        return _create_portfolio_sheet(name)
+    return _create_portfolio_local(name)
+
+
+def delete_portfolio(name: str) -> bool:
+    if sheets_configured():
+        return _delete_portfolio_sheets(name)
+    return _delete_portfolio_local(name)
 
 
 def sanitize_base(df: pd.DataFrame) -> pd.DataFrame:
@@ -110,54 +437,6 @@ def _normalize(df: pd.DataFrame) -> pd.DataFrame:
     clean = sanitize_base(df)
     clean = clean[clean["Ticker"] != ""].reset_index(drop=True)
     return clean
-
-
-def read_portfolio(name: str, store: Dict[str, List[Dict[str, object]]]) -> pd.DataFrame:
-    rows = store.get(name, [])
-    if not rows:
-        return sanitize_base(pd.DataFrame(columns=PORTFOLIO_HEADER))
-    return sanitize_base(pd.DataFrame(rows))
-
-
-def write_portfolio(
-    name: str,
-    df: pd.DataFrame,
-    store: Dict[str, List[Dict[str, object]]],
-    prevent_empty: bool = True,
-) -> Tuple[bool, pd.DataFrame]:
-    clean = _normalize(df)
-    if clean.empty:
-        if prevent_empty:
-            st.warning("Skipped save: portfolio is empty (won’t overwrite saved data).")
-            return False, df
-        store[name] = []
-        _save_portfolio_store(store)
-        return True, sanitize_base(pd.DataFrame(columns=PORTFOLIO_HEADER))
-
-    ts = pd.Timestamp.now(tz="UTC").strftime("%Y-%m-%d %H:%M:%S UTC")
-    clean.loc[:, "Last Updated"] = ts
-    out = clean.where(pd.notna(clean), None).to_dict(orient="records")
-    store[name] = out
-    _save_portfolio_store(store)
-    return True, sanitize_base(clean)
-
-
-def create_portfolio(name: str, store: Dict[str, List[Dict[str, object]]]) -> bool:
-    if name in store:
-        return False
-    store[name] = []
-    _save_portfolio_store(store)
-    return True
-
-
-def delete_portfolio(name: str, store: Dict[str, List[Dict[str, object]]]) -> bool:
-    if name not in store or len(store) <= 1:
-        return False
-    store.pop(name, None)
-    _save_portfolio_store(store)
-    return True
-
-
 def _to_float(value) -> float | None:
     if value is None:
         return None
@@ -183,144 +462,7 @@ def build_display(df: pd.DataFrame) -> Tuple[pd.DataFrame, Dict[str, float | Non
         if ticker:
             tickers.append(ticker)
             idxs.append(idx)
-        else:
-            for col in COMPUTED_COLUMNS:
-                base.at[idx, col] = None
-
-    quotes = fetch_quotes(tickers)
-    quote_map: Dict[str, Dict[str, float | None]] = {
-        row["Ticker"]: row for row in quotes.to_dict(orient="records")
-    }
-
-    price_list: List[float | None] = [None] * len(base)
-    mv_list: List[float | None] = [None] * len(base)
-    cb_list: List[float | None] = [None] * len(base)
-    pl_list: List[float | None] = [None] * len(base)
-    pl_pct_list: List[float | None] = [None] * len(base)
-    day_pct_list: List[float | None] = [None] * len(base)
-
-    for idx, ticker in zip(idxs, tickers):
-        q = quote_map.get(ticker, {})
-        price = _to_float(q.get("Price")) if isinstance(q, dict) else None
-        shares = _to_float(base.at[idx, "Shares"])
-        avg_cost = _to_float(base.at[idx, "Avg Cost"])
-
-        market_value = price * shares if price is not None and shares is not None else None
-        cost_basis = avg_cost * shares if avg_cost is not None and shares is not None else None
-        pl = (
-            market_value - cost_basis
-            if market_value is not None and cost_basis is not None
-            else None
-        )
-        pl_pct = (
-            (pl / cost_basis) * 100.0
-            if pl is not None and cost_basis not in (None, 0)
-            else None
-        )
-
-        day_pct = _to_float(q.get("Day %")) if isinstance(q, dict) else None
-
-        price_list[idx] = price
-        mv_list[idx] = market_value
-        cb_list[idx] = cost_basis
-        pl_list[idx] = pl
-        pl_pct_list[idx] = pl_pct
-        day_pct_list[idx] = day_pct
-
-    total_mv = float(sum(v for v in mv_list if isinstance(v, (int, float))))
-    total_cb = float(sum(v for v in cb_list if isinstance(v, (int, float))))
-    total_pl = total_mv - total_cb
-    total_pl_pct = (total_pl / total_cb * 100.0) if total_cb else None
-
-    weight_pct_list: List[float | None] = [None] * len(base)
-    if total_mv:
-        for idx, mv in enumerate(mv_list):
-            if mv not in (None, 0):
-                weight_pct_list[idx] = (mv / total_mv) * 100.0
-
-    for col, values in (
-        ("Price", price_list),
-        ("Market Value", mv_list),
-        ("Cost Basis", cb_list),
-        ("P/L $", pl_list),
-        ("P/L %", pl_pct_list),
-        ("Day %", day_pct_list),
-        ("Weight %", weight_pct_list),
-    ):
-        base[col] = values
-
-    display = base.reindex(columns=DISPLAY_COLUMNS)
-    display = display.where(pd.notna(display), None)
-    return display, {
-        "total_mv": total_mv,
-        "total_cb": total_cb,
-        "total_pl": total_pl,
-        "total_pl_pct": total_pl_pct,
-    }
-
-
-# ============================
-#        QUOTES (optimized)
-# ============================
-def _threaded_prev_close(tickers: List[str]) -> Dict[str, float]:
-    """Fetch previous_close via fast_info concurrently to cut latency for many tickers."""
-    out: Dict[str, float] = {}
-
-    def fetch_one(t: str):
-        try:
-            fi = yf.Ticker(t).fast_info
-            pc = fi.get("previous_close", None)
-            if pc is not None:
-                out[t] = float(pc)
-        except Exception:
-            pass
-
-    if not tickers:
-        return out
-
-    with cf.ThreadPoolExecutor(max_workers=min(8, max(2, len(tickers)))) as ex:
-        list(ex.map(fetch_one, tickers))
-    return out
-
-
-@st.cache_data(ttl=45, show_spinner=False)
-def fetch_quotes(tickers: List[str]) -> pd.DataFrame:
-    """
-    Returns: Ticker, Price, Day %, Prev Close, Time
-    - Single yf.download call for last price
-    - Threaded fast_info for previous_close
-    """
-    tickers = [t.strip().upper() for t in tickers if isinstance(t, str) and t.strip()]
-    tickers = sorted(set(tickers))
-    if not tickers:
-        return pd.DataFrame(columns=["Ticker", "Price", "Day %", "Prev Close", "Time"])
-
-    try:
-        hist = yf.download(
-            tickers=tickers,
-            period="1d",
-            interval="1m",
-            group_by="ticker",
-            auto_adjust=False,
-            progress=False,
-        )
-    except Exception:
-        hist = pd.DataFrame()
-
-    prev_map = _threaded_prev_close(tickers)
-    ts_now = pd.Timestamp.utcnow().isoformat()
-
-    rows = []
-    multi = isinstance(hist.columns, pd.MultiIndex)
-    for t in tickers:
-        price = None
-        try:
-            sub = hist[t] if multi else hist
-            if sub is not None and not sub.empty:
-                price = float(sub.iloc[-1]["Close"])
-        except Exception:
-            pass
-
+@@ -324,161 +604,162 @@ def fetch_quotes(tickers: List[str]) -> pd.DataFrame:
         prev_close = prev_map.get(t)
         day_pct = None
         if price is not None and prev_close not in (None, 0) and not (
@@ -346,14 +488,12 @@ def fetch_quotes(tickers: List[str]) -> pd.DataFrame:
 # ============================
 st.title("📂 Portfolios")
 
-store = _load_portfolio_store()
-portfolio_names = list_portfolios(store)
+portfolio_names = list_portfolios()
 pending_selection = st.session_state.pop("pending_selected_portfolio", None)
 if pending_selection:
     st.session_state["selected_portfolio"] = pending_selection
 if not portfolio_names:
-    store = _load_portfolio_store()
-    portfolio_names = list_portfolios(store)
+    portfolio_names = [DEFAULT_PORTFOLIO_NAME]
 
 selected_name = st.session_state.get("selected_portfolio")
 if selected_name not in portfolio_names:
@@ -377,12 +517,13 @@ with add_col:
                 st.warning("Enter a name to create a portfolio.")
             elif candidate in portfolio_names:
                 st.warning("A portfolio with that name already exists.")
-            elif create_portfolio(candidate, store):
+            elif create_portfolio(candidate):
                 st.session_state.pop(f"portfolio_data::{candidate}", None)
                 st.session_state["pending_selected_portfolio"] = candidate
-                st.session_state["selected_portfolio"] = candidate
                 st.session_state.pop("confirm_delete_target", None)
                 st.rerun()
+            else:
+                st.warning("Unable to create the portfolio. Check your Google Sheet configuration.")
 
 with del_col:
     delete_disabled = len(portfolio_names) <= 1
@@ -399,14 +540,12 @@ if confirm_target == selected_name:
     confirm_col, cancel_col = st.columns(2)
     with confirm_col:
         if st.button("Yes, delete", key="confirm_delete_btn", type="secondary"):
-            if delete_portfolio(selected_name, store):
+            if delete_portfolio(selected_name):
                 st.session_state.pop(f"portfolio_data::{selected_name}", None)
                 st.session_state.pop("confirm_delete_target", None)
-                remaining = list_portfolios(store)
+                remaining = list_portfolios()
                 if not remaining:
-                    refreshed = _load_portfolio_store()
-                    remaining = list_portfolios(refreshed)
-                    store = refreshed
+                    remaining = [DEFAULT_PORTFOLIO_NAME]
                 st.session_state["selected_portfolio"] = remaining[0]
                 st.rerun()
             else:
@@ -417,7 +556,10 @@ if confirm_target == selected_name:
 
 info_col, toggle_col, interval_col = st.columns([2, 1, 1])
 with info_col:
-    st.caption("Edit holdings below. Changes persist locally in `portfolios.json` when you save.")
+    if sheets_configured():
+        st.caption("Edit holdings below. Changes persist to your Google Sheet when you save.")
+    else:
+        st.caption("Edit holdings below. Changes persist locally in `portfolios.json` when you save.")
 with toggle_col:
     auto_refresh = st.toggle("Auto-refresh", value=True, help="Refresh quotes periodically")
 with interval_col:
@@ -432,7 +574,7 @@ if auto_refresh:
 
 session_key = f"portfolio_data::{selected_name}"
 if session_key not in st.session_state:
-    st.session_state[session_key] = read_portfolio(selected_name, store)
+    st.session_state[session_key] = read_portfolio(selected_name)
 
 base_df = st.session_state[session_key]
 display_df, totals = build_display(base_df)
@@ -468,7 +610,7 @@ if not updated_base.equals(base_df):
 save_col, _ = st.columns([1, 5])
 with save_col:
     if st.button("💾 Save Portfolio", type="primary", use_container_width=True):
-        success, saved_df = write_portfolio(selected_name, base_df, store)
+        success, saved_df = write_portfolio(selected_name, base_df)
         if success:
             st.session_state[session_key] = saved_df
             st.success("Saved portfolio ✅")
