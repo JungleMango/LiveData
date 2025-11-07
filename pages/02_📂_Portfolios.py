@@ -175,7 +175,12 @@ with colC:
     interval = st.selectbox("Refresh Interval (sec)", [15, 30, 45, 60], index=1)
 
 if auto_refresh:
-    st.autorefresh(interval=interval * 1000, key="autorefresh_portfolio")
+    last_refresh = st.session_state.get("last_refresh", 0)
+    now = time.time()
+    if now - last_refresh > interval:
+        st.session_state["last_refresh"] = now
+        st.experimental_rerun()
+
 
 # Load from Google Sheets
 ws = get_worksheet(SHEET_TAB_NAME)
