@@ -1,0 +1,14 @@
+
+
+{
+  "Main Portfolio": [
+    {
+      "Ticker": "QQQ",
+      "Shares": 10.0,
+      "Avg Cost": 420.0,
+      "Currency": "USD",
+      "Notes": "Sample",
+      "Last Updated": ""
+    }
+  ]
+}
