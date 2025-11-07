@@ -91,14 +91,6 @@ def colored_header_bg(
         """,
         unsafe_allow_html=True,
     )
-def with_arrow(x):
-    if pd.isna(x): return ""
-    x = float(x)
-    return f"▲ {x:.2f}%" if x > 0 else (f"▼ {abs(x):.2f}%" if x < 0 else f"{x:.2f}%")
-
-view["Daily Δ"] = view["Daily Change %"].apply(with_arrow)
-view["7D Δ"]    = view["7D % Change"].apply(with_arrow)
-
 
 def normalize_watch_df(df: pd.DataFrame) -> pd.DataFrame:
     out = pd.DataFrame({"Ticker": df.get("Ticker", pd.Series([], dtype=str))})
@@ -121,6 +113,7 @@ def round2_up(value):
         return math.ceil(float(value) * 100) / 100.0
     except Exception:
         return None
+    
 
 # ============================
 #     GOOGLE SHEETS HELPERS
@@ -395,6 +388,68 @@ st.dataframe(styled, use_container_width=True)
 # Persist in-memory
 st.session_state["watchlist"] = normalize_watch_df(edited[["Ticker"]])
 st.session_state["_wl_last_edit_ts"] = time.time()
+
+# 1) Base tickers from session (or empty)
+base = st.session_state.get("watchlist", pd.DataFrame({"Ticker": []}))
+curr = normalize_watch_df(base) if "normalize_watch_df" in globals() else base
+tickers = curr["Ticker"].unique().tolist()
+
+# 2) Fetch batched market data (uses your existing helper)
+#    Cache key so reruns are instant unless tickers change
+cache_key = "|".join(sorted(tickers)) + ":60d"
+bundle = fetch_watch_batched(tickers, days=60, _key=cache_key) if tickers else {"last_price":{}, "prev_close":{}, "history":{}}
+last_price = bundle.get("last_price", {})
+prev_close = bundle.get("prev_close", {})
+history    = bundle.get("history", {})
+
+# 3) Local helpers (no network)
+def round2_up(x):
+    import math, pandas as _pd
+    try:
+        return None if _pd.isna(x) else math.ceil(float(x)*100)/100.0
+    except Exception:
+        return None
+
+def _pct_7d(s: pd.Series):
+    if s is None or s.empty or len(s) < 8: return None
+    return round2_up((float(s.iloc[-1]) / float(s.iloc[-8]) - 1) * 100)
+
+def _last_30(s: pd.Series):
+    return [] if s is None or s.empty else [round2_up(x) for x in s.tail(30).tolist()]
+
+# daily % change from prev_close -> last
+rows = []
+for t in tickers:
+    p0, p1 = prev_close.get(t), last_price.get(t)
+    chg = round2_up((p1/p0 - 1)*100) if (p0 and p1) else None
+    rows.append({"Ticker": t, "Daily Change %": chg})
+changes_df = pd.DataFrame(rows) if rows else pd.DataFrame(columns=["Ticker","Daily Change %"])
+
+map_7d  = {t: _pct_7d(history.get(t)) for t in tickers}
+map_30 = {t: _last_30(history.get(t)) for t in tickers}
+
+# 4) Optional: names (cached helper you already have)
+name_map = fetch_names_fast(tickers) if tickers else {}
+
+# 5) Compose the 'view' DataFrame
+view = curr.copy()
+view["Name"] = view["Ticker"].map(name_map)
+view["Live Price"] = view["Ticker"].map(last_price).apply(round2_up)
+view = view.merge(changes_df, on="Ticker", how="left")
+view["7D % Change"] = view["Ticker"].map(map_7d)
+view["30D Trend"]   = view["Ticker"].map(map_30)
+
+# 6) Arrow columns (safe even if columns are missing)
+def with_arrow(x):
+    if pd.isna(x): return ""
+    try: x = float(x)
+    except Exception: return ""
+    arrow = "▲" if x > 0 else ("▼" if x < 0 else "")
+    color = "#10B981" if x > 0 else ("#EF4444" if x < 0 else "#6B7280")
+    return f'<span style="color:{color};font-weight:600;">{arrow} {abs(x):.2f}%</span>'
+
+view["Daily Δ"] = view["Daily Change %"].apply(with_arrow) if "Daily Change %" in view.columns else ""
+view["7D Δ"]    = view["7D % Change"].apply(with_arrow)    if "7D % Change" in view.columns else ""
 
 # ============================
 #      SAVE / RELOAD / REFRESH
