@@ -1,26 +1,28 @@
-# 03_💼_Portfolio_Tracker.py
-# Portfolio Tracker — live valuation + P/L with Google Sheets persistence (same as watchlist)
+# 02_📂_Portfolios.py
+# Live Portfolio Tracker — Google Sheets persistence (same [sheets] secrets) + yfinance quotes
 
-import time
+import re, json, math, time
 from typing import List, Dict
-import math
 import pandas as pd
 import streamlit as st
-import yfinance as yf
 import gspread
 from google.oauth2 import service_account
+import yfinance as yf
 
 # ============================
 #            CONFIG
 # ============================
 st.set_page_config(
-    page_title="Portfolio Tracker",
-    page_icon="💼",
+    page_title="Portfolios",
+    page_icon="📂",
     layout="wide",
     initial_sidebar_state="expanded",
 )
 
-# ---- Styling: highlight editable columns (Ticker, Shares, Avg Cost, Currency, Notes)
+SHEET_TAB_NAME = "Portfolio"  # Tab name in your Google Sheet
+PORTFOLIO_HEADER = ["Ticker", "Shares", "Avg Cost", "Currency", "Notes", "Last Updated"]
+
+# Subtle highlight on editable columns
 st.markdown("""
 <style>
 [data-testid="stDataEditor"] table tr td:nth-child(-n+5),
@@ -30,115 +32,170 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# Change this if you prefer a different tab name inside your Google Sheet
-SHEET_TAB_NAME = "Portfolio"   # worksheet name inside the same Google Sheet as your Watchlist
-# If your watchlist page loads credentials from st.secrets["gcp_service_account"], we’ll do the same:
-SCOPES = ["https://www.googleapis.com/auth/spreadsheets",
-          "https://www.googleapis.com/auth/drive"]
+# ============================
+#     SHEETS AUTH (same as Watchlist)
+# ============================
 
-# ============================
-#     GOOGLE SHEETS HELPERS
-# ============================
-@st.cache_resource(show_spinner=False)
-def get_gspread_client():
-    # Expecting the same secret you used on Watchlist:
-    # st.secrets["gcp_service_account"] = {type, project_id, private_key_id, private_key, client_email, ...}
+def _assert_sheets_secrets():
+    if "sheets" not in st.secrets:
+        st.error("Missing [sheets] in secrets (App → Settings → Secrets or .streamlit/secrets.toml).")
+        st.stop()
+    s = st.secrets["sheets"]
+    for k in ("sheet_id", "service_account"):
+        if k not in s:
+            st.error(f"Missing key in [sheets]: {k}")
+            st.stop()
+
+@st.cache_resource
+def get_sheet_client():
+    _assert_sheets_secrets()
+    raw = st.secrets["sheets"]["service_account"]
+
+    if isinstance(raw, dict):
+        info = raw
+    else:
+        # Escape real newlines inside the private_key ONLY (common paste issue)
+        def _escape_pk_newlines(s: str) -> str:
+            return re.sub(
+                r'("private_key"\s*:\s*")([^"]+?)(")',
+                lambda m: m.group(1) + m.group(2).replace("\n", "\\n") + m.group(3),
+                s,
+                flags=re.S,
+            )
+        fixed = _escape_pk_newlines(raw)
+        info = json.loads(fixed)
+
     creds = service_account.Credentials.from_service_account_info(
-        st.secrets["gcp_service_account"], scopes=SCOPES
+        info, scopes=["https://www.googleapis.com/auth/spreadsheets"]
     )
     return gspread.authorize(creds)
 
-@st.cache_resource(show_spinner=False)
-def get_worksheet(sheet_tab: str):
-    gc = get_gspread_client()
-    # Expect a sheet name in st.secrets just like your Watchlist page:
-    # st.secrets["settings"]["sheet_url"] points to the same Google Sheet
-    sh = gc.open_by_url(st.secrets["settings"]["sheet_url"])
+def _open_or_create_portfolio_ws(client: gspread.Client, sheet_id: str, tab_name: str):
+    sh = client.open_by_key(sheet_id)
     try:
-        ws = sh.worksheet(sheet_tab)
+        ws = sh.worksheet(tab_name)
     except gspread.exceptions.WorksheetNotFound:
-        ws = sh.add_worksheet(title=sheet_tab, rows=1000, cols=20)
-        # Initialize headers
-        ws.update(
-            "A1:F1",
-            [["Ticker", "Shares", "Avg Cost", "Currency", "Notes", "Last Updated"]]
-        )
+        ws = sh.add_worksheet(title=tab_name, rows=1000, cols=len(PORTFOLIO_HEADER))
+        ws.update("A1", [PORTFOLIO_HEADER])
     return ws
 
-def sheet_to_df(ws) -> pd.DataFrame:
-    vals = ws.get_all_values()
-    if not vals:
-        return pd.DataFrame(columns=["Ticker", "Shares", "Avg Cost", "Currency", "Notes", "Last Updated"])
-    df = pd.DataFrame(vals[1:], columns=vals[0])  # drop header row into columns
-    # Coerce numeric columns
-    for col in ["Shares", "Avg Cost"]:
-        if col in df.columns:
-            df[col] = pd.to_numeric(df[col], errors="coerce")
-    # Normalize blanks
-    for col in ["Ticker", "Currency", "Notes"]:
-        if col in df.columns:
-            df[col] = df[col].fillna("").astype(str).str.strip()
-    return df
+# ============================
+#     SHEETS I/O HELPERS
+# ============================
 
-def df_to_sheet(ws, df: pd.DataFrame):
+def _normalize_portfolio_df(df: pd.DataFrame) -> pd.DataFrame:
     # Ensure required columns exist
-    base_cols = ["Ticker", "Shares", "Avg Cost", "Currency", "Notes", "Last Updated"]
-    for c in base_cols:
-        if c not in df.columns:
-            df[c] = "" if c not in ("Shares", "Avg Cost") else None
+    for col in PORTFOLIO_HEADER:
+        if col not in df.columns:
+            df[col] = None if col in ("Shares", "Avg Cost") else ""
 
-    # Trim/Order columns for persistence
-    out = df[base_cols].copy()
+    # Trim + types
+    df["Ticker"]   = df["Ticker"].fillna("").astype(str).str.strip().str.upper()
+    df["Currency"] = df["Currency"].fillna("").astype(str).str.strip().str.upper()
+    df["Notes"]    = df["Notes"].fillna("").astype(str)
+    df["Shares"]   = pd.to_numeric(df["Shares"], errors="coerce")
+    df["Avg Cost"] = pd.to_numeric(df["Avg Cost"], errors="coerce")
+
+    # Drop fully blank rows (no ticker)
+    df = df[df["Ticker"] != ""].copy()
+
+    # Canonical column order
+    return df[PORTFOLIO_HEADER]
+
+def get_portfolio_snapshot() -> pd.DataFrame:
+    """Read current portfolio rows from the sheet (robust & normalized)."""
+    try:
+        client = get_sheet_client()
+        ws = _open_or_create_portfolio_ws(client, st.secrets["sheets"]["sheet_id"], SHEET_TAB_NAME)
+        values = ws.get_all_values()
+        if not values:
+            return pd.DataFrame(columns=PORTFOLIO_HEADER)
+        header, *rows = values
+        if not header:
+            return pd.DataFrame(columns=PORTFOLIO_HEADER)
+
+        # Back-compat: if only "Ticker" exists, expand
+        if header == ["Ticker"]:
+            tickers = [r[0] for r in rows if r]
+            return _normalize_portfolio_df(pd.DataFrame({"Ticker": tickers}))
+
+        df = pd.DataFrame(rows, columns=header)
+        return _normalize_portfolio_df(df)
+    except Exception:
+        return pd.DataFrame(columns=PORTFOLIO_HEADER)
+
+def save_portfolio_to_sheet(df: pd.DataFrame, prevent_empty: bool = True) -> bool:
+    """
+    Safely write the entire portfolio table.
+    - Skips saving if cleaned df is empty (prevents nuking the tab).
+    - Overwrites the sheet with canonical header + rows.
+    """
+    clean = _normalize_portfolio_df(df)
+    if prevent_empty and clean.empty:
+        st.warning("Skipped save: portfolio is empty (won’t overwrite the sheet).")
+        return False
+
+    client = get_sheet_client()
+    ws = _open_or_create_portfolio_ws(client, st.secrets["sheets"]["sheet_id"], SHEET_TAB_NAME)
+
+    # Timestamp just before write
+    ts = pd.Timestamp.now(tz="UTC").strftime("%Y-%m-%d %H:%M:%S UTC")
+    if "Last Updated" in clean.columns:
+        clean.loc[:, "Last Updated"] = ts
 
     # Replace NaN with blanks for Sheets
-    out = out.where(pd.notna(out), "")
+    out = clean.where(pd.notna(clean), "")
+    data = [PORTFOLIO_HEADER] + out.values.tolist()
 
-    rows = [out.columns.tolist()] + out.values.tolist()
-    # Overwrite the whole sheet range safely
     ws.clear()
-    ws.update(f"A1:{chr(ord('A') + len(out.columns) - 1)}{len(rows)}", rows)
+    ws.update(f"A1:{chr(ord('A') + len(PORTFOLIO_HEADER) - 1)}{len(data)}", data)
+    return True
 
 # ============================
 #        QUOTE HELPERS
 # ============================
+
 @st.cache_data(ttl=45, show_spinner=False)
 def fetch_quotes(tickers: List[str]) -> pd.DataFrame:
-    """Batch fetch latest prices and day changes for tickers."""
+    """
+    Batch fetch latest prices and day change for tickers using yfinance.
+    Returns columns: Ticker, Price, Day %, Prev Close, Time
+    """
     tickers = [t.strip().upper() for t in tickers if t and isinstance(t, str)]
     tickers = sorted(set(tickers))
     if not tickers:
         return pd.DataFrame(columns=["Ticker", "Price", "Day %", "Prev Close", "Time"])
 
-    # yfinance fast batch: use Ticker().history or download
-    # download is reliable for multiple tickers intraday
+    # Multi-ticker intraday history; fallback to single if needed
     try:
-        hist = yf.download(tickers=tickers, period="1d", interval="1m", group_by="ticker", auto_adjust=False, progress=False)
+        hist = yf.download(
+            tickers=tickers, period="1d", interval="1m",
+            group_by="ticker", auto_adjust=False, progress=False
+        )
     except Exception:
         hist = pd.DataFrame()
 
     quotes = []
     ts_now = pd.Timestamp.utcnow().isoformat()
+
     for t in tickers:
         price = None
         prev_close = None
         day_pct = None
 
         try:
-            if isinstance(hist.columns, pd.MultiIndex):
-                # Multi-ticker frame
-                sub = hist[t]
-            else:
-                # Single ticker returns a flat frame
-                sub = hist
-            if not sub.empty:
+            sub = hist[t] if isinstance(hist.columns, pd.MultiIndex) else hist
+            if sub is not None and not sub.empty:
                 last = sub.iloc[-1]
                 price = float(last["Close"])
-                # Get previous close with yfinance Ticker().info or .fast_info
-                fi = yf.Ticker(t).fast_info
-                prev_close = float(fi.get("previous_close", float("nan")))
-                # Compute day change %
-                if prev_close and not math.isnan(prev_close) and prev_close != 0:
-                    day_pct = (price / prev_close - 1) * 100.0
+
+            # Previous close via fast_info
+            fi = yf.Ticker(t).fast_info
+            prev_close = fi.get("previous_close", None)
+            prev_close = float(prev_close) if prev_close is not None else None
+
+            if price is not None and prev_close not in (None, 0) and not (isinstance(prev_close, float) and math.isnan(prev_close)):
+                day_pct = (price / prev_close - 1) * 100.0
         except Exception:
             pass
 
@@ -150,8 +207,7 @@ def fetch_quotes(tickers: List[str]) -> pd.DataFrame:
             "Time": ts_now,
         })
 
-    qdf = pd.DataFrame(quotes)
-    return qdf
+    return pd.DataFrame(quotes)
 
 def fmt2(x, none=""):
     try:
@@ -164,40 +220,36 @@ def fmt2(x, none=""):
 # ============================
 #            UI
 # ============================
-st.title("💼 Portfolio Tracker")
 
-colA, colB, colC = st.columns([2,1,1])
-with colA:
-    st.caption("Edit your holdings below. The *first five columns* are editable and persist to Google Sheets.")
-with colB:
-    auto_refresh = st.toggle("Auto-refresh", value=True, help="Refresh quotes every ~30s")
-with colC:
+st.title("📂 Portfolios")
+
+topA, topB, topC = st.columns([2,1,1])
+with topA:
+    st.caption("Edit holdings below. The first five columns are editable and persist to Google Sheets.")
+with topB:
+    auto_refresh = st.toggle("Auto-refresh", value=True, help="Refresh quotes periodically")
+with topC:
     interval = st.selectbox("Refresh Interval (sec)", [15, 30, 45, 60], index=1)
 
+# Periodic refresh without deprecated APIs
 if auto_refresh:
-    last_refresh = st.session_state.get("last_refresh", 0)
     now = time.time()
-    if now - last_refresh > interval:
+    last = st.session_state.get("last_refresh", 0.0)
+    if now - last >= interval:
         st.session_state["last_refresh"] = now
         st.rerun()
 
-
-# Load from Google Sheets
-ws = get_worksheet(SHEET_TAB_NAME)
-base_df = sheet_to_df(ws)
-
-# Ensure required columns
-for col in ["Ticker", "Shares", "Avg Cost", "Currency", "Notes", "Last Updated"]:
-    if col not in base_df.columns:
-        base_df[col] = "" if col in ("Ticker", "Currency", "Notes", "Last Updated") else None
-
-# Empty-state starter row
+# Load snapshot from Sheets
+base_df = get_portfolio_snapshot()
 if base_df.empty:
-    base_df = pd.DataFrame([{"Ticker":"QQQ","Shares":10,"Avg Cost":420.00,"Currency":"USD","Notes":"Sample","Last Updated":""}])
+    base_df = pd.DataFrame([{
+        "Ticker": "QQQ", "Shares": 10, "Avg Cost": 420.0,
+        "Currency": "USD", "Notes": "Sample", "Last Updated": ""
+    }])
 
 st.subheader("Holdings (editable)")
 edited = st.data_editor(
-    base_df[["Ticker","Shares","Avg Cost","Currency","Notes","Last Updated"]],
+    base_df,
     num_rows="dynamic",
     use_container_width=True,
     hide_index=True,
@@ -205,34 +257,37 @@ edited = st.data_editor(
         "Ticker": st.column_config.TextColumn(help="e.g., QQQ, NVDA, AAPL"),
         "Shares": st.column_config.NumberColumn(format="%.4f", help="Can be fractional"),
         "Avg Cost": st.column_config.NumberColumn(format="%.4f"),
-        "Currency": st.column_config.TextColumn(help="Optional (e.g., USD/CAD)"),
+        "Currency": st.column_config.TextColumn(help="USD/CAD/etc"),
         "Notes": st.column_config.TextColumn(),
         "Last Updated": st.column_config.TextColumn(disabled=True),
     },
 )
 
-# Save controls
-save_col1, save_col2, _ = st.columns([1,1,6])
-with save_col1:
-    do_save = st.button("💾 Save to Sheet", type="primary", use_container_width=True)
-with save_col2:
-    add_row = st.button("➕ Add Row", use_container_width=True)
+ctrl1, ctrl2, ctrl3 = st.columns([1,1,6])
+with ctrl1:
+    if st.button("💾 Save to Sheet", type="primary", use_container_width=True):
+        if save_portfolio_to_sheet(edited):
+            st.success("Saved to Google Sheet ✅")
+            st.rerun()
+with ctrl2:
+    if st.button("➕ Add Row", use_container_width=True):
+        edited = pd.concat(
+            [edited, pd.DataFrame([{
+                "Ticker":"", "Shares":0.0, "Avg Cost":0.0, "Currency":"", "Notes":"", "Last Updated":""
+            }])],
+            ignore_index=True
+        )
 
-if add_row:
-    edited = pd.concat(
-        [edited, pd.DataFrame([{"Ticker":"", "Shares":0.0, "Avg Cost":0.0, "Currency":"", "Notes":"", "Last Updated":""}])],
-        ignore_index=True
-    )
+# Work on a cleaned copy for quotes/calcs (don’t persist yet)
+work = _normalize_portfolio_df(edited)
+if work.empty:
+    st.info("Add at least one ticker to see live valuation.")
+    st.stop()
 
-# Data cleansing: drop fully blank rows
-mask_nonblank = edited["Ticker"].astype(str).str.strip() != ""
-edited = edited[mask_nonblank].copy()
-
-# Live quotes merge
-tickers = edited["Ticker"].fillna("").astype(str).str.strip().tolist()
+# Live quotes
+tickers = work["Ticker"].tolist()
 qdf = fetch_quotes(tickers)
-
-merged = edited.merge(qdf, on="Ticker", how="left")
+merged = work.merge(qdf, on="Ticker", how="left")
 
 # Calculations
 merged["Price"] = pd.to_numeric(merged["Price"], errors="coerce")
@@ -248,42 +303,32 @@ merged["P/L %"]        = (merged["P/L $"] / merged["Cost Basis"]) * 100
 total_mv = float(pd.to_numeric(merged["Market Value"], errors="coerce").sum())
 total_cb = float(pd.to_numeric(merged["Cost Basis"], errors="coerce").sum())
 total_pl = total_mv - total_cb
-total_pl_pct = (total_pl / total_cb) * 100 if total_cb else float("nan")
+total_pl_pct = (total_pl / total_cb * 100) if total_cb else float("nan")
 
 # Weights
 merged["Weight %"] = (merged["Market Value"] / total_mv * 100) if total_mv else 0.0
 
 st.subheader("Live Valuation")
-# Nice compact view
 view_cols = [
     "Ticker","Shares","Avg Cost","Price","Market Value","Cost Basis","P/L $","P/L %","Day %","Weight %"
 ]
 show = merged[view_cols].copy()
+
 # Formatting
-for c in ["Avg Cost","Price","Market Value","Cost Basis","P/L $"]:
+money_cols = ["Avg Cost","Price","Market Value","Cost Basis","P/L $"]
+pct_cols = ["P/L %","Day %","Weight %"]
+
+for c in money_cols:
     show[c] = show[c].apply(lambda x: fmt2(x))
-for c in ["P/L %","Day %","Weight %"]:
+for c in pct_cols:
     show[c] = show[c].apply(lambda x: ("" if x is None or (isinstance(x,float) and math.isnan(x)) else f"{x:.2f}%"))
 
 st.dataframe(show, use_container_width=True, hide_index=True)
 
-# Totals Summary
 m1, m2, m3, m4 = st.columns(4)
 m1.metric("Total Market Value", f"{fmt2(total_mv)}")
 m2.metric("Total Cost Basis", f"{fmt2(total_cb)}")
 m3.metric("Total P/L $", f"{fmt2(total_pl)}")
-m4.metric("Total P/L %", ("" if math.isnan(total_pl_pct) else f"{total_pl_pct:.2f}%"))
+m4.metric("Total P/L %", ("" if (isinstance(total_pl_pct,float) and math.isnan(total_pl_pct)) else f"{total_pl_pct:.2f}%"))
 
-st.caption("Prices auto-refresh based on your interval. Calculations use the latest fetched price and your saved Shares/Avg Cost.")
-
-# Persist if requested
-if do_save:
-    to_save = edited.copy()
-    to_save["Last Updated"] = pd.Timestamp.now(tz="UTC").strftime("%Y-%m-%d %H:%M:%S UTC")
-    try:
-        df_to_sheet(ws, to_save)
-        st.success("Saved to Google Sheet ✅")
-        time.sleep(0.3)
-        st.rerun()
-    except Exception as e:
-        st.error(f"Save failed: {e}")
+st.caption("Prices refresh using your interval. P/L uses latest fetched price against your Shares and Avg Cost.")
