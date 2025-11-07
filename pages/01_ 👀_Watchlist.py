@@ -33,17 +33,44 @@ SHEET_TAB_NAME = "Watchlist"  # worksheet name inside your Google Sheet
 # ============================
 #         UI / UTIL
 # ============================
-def colored_header_bg(title: str, bg_color: str, text_color: str = "white", font_size: int = 26):
+def colored_header_bg(
+    title: str,
+    bg_color: str = "#8A2BE2",
+    text_color: str = "white",
+    font_size: int = 26,
+    align: str = "center",
+    gradient: bool = True
+):
+    """
+    Create a clean, centered header with optional gradient background.
+    
+    Parameters:
+        title (str): The header text (supports emojis).
+        bg_color (str): Base color (e.g., "#8A2BE2").
+        text_color (str): Font color (default "white").
+        font_size (int): Font size in px (default 26).
+        align (str): "center", "left", or "right".
+        gradient (bool): Whether to apply a gradient effect.
+    """
+    gradient_css = (
+        f"linear-gradient(135deg, {bg_color} 0%, {bg_color}AA 100%)"
+        if gradient else bg_color
+    )
+
     st.markdown(
         f"""
         <div style="
-            background-color: {bg_color};
+            background: {gradient_css};
             color: {text_color};
-            padding: 10px;
-            border-radius: 8px;
+            padding: 14px;
+            border-radius: 12px;
             font-size: {font_size}px;
-            font-weight: bold;
-            text-align: left;">
+            font-weight: 700;
+            text-align: {align};
+            box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+            margin-top: 10px;
+            margin-bottom: 20px;
+            letter-spacing: 0.5px;">
             {title}
         </div>
         """,
