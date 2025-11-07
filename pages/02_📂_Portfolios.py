@@ -1,434 +1,284 @@
-pages/02_📂_Portfolios.py
-+227
--20
+# 03_💼_Portfolio_Tracker.py
+# Portfolio Tracker — live valuation + P/L with Google Sheets persistence (same as watchlist)
 
-import json
-import re
-from pathlib import Path
-from typing import Dict, List
-
+import time
+from typing import List, Dict
+import math
 import pandas as pd
-import yfinance as yf
-import altair as alt
 import streamlit as st
-from urllib.parse import quote, unquote
-
+import yfinance as yf
 import gspread
 from google.oauth2 import service_account
 
+# ============================
+#            CONFIG
+# ============================
 st.set_page_config(
-    page_title="Multi-Portfolio Dashboard",
-    page_icon="📊",
+    page_title="Portfolio Tracker",
+    page_icon="💼",
     layout="wide",
     initial_sidebar_state="expanded",
 )
 
-APP_DIR   = Path(__file__).parent               # absolute dir of this script
-DATA_DIR  = APP_DIR                              # or APP_DIR / "data"
-DATA_FILE = DATA_DIR / "portfolios.json"
-DATA_DIR.mkdir(parents=True, exist_ok=True)      # ensure folder exists
+# ---- Styling: highlight editable columns (Ticker, Shares, Avg Cost, Currency, Notes)
+st.markdown("""
+<style>
+[data-testid="stDataEditor"] table tr td:nth-child(-n+5),
+[data-testid="stDataEditor"] table tr th:nth-child(-n+5) {
+  background-color: rgba(30,144,255,0.06);
+}
+</style>
+""", unsafe_allow_html=True)
 
-SHEET_TAB_PORTFOLIOS = "Portfolios"
-SHEET_TAB_WATCHLIST = "Watchlist"
-PORTFOLIO_HEADERS = ["Portfolio", "Ticker", "Shares", "Avg Cost"]
+# Change this if you prefer a different tab name inside your Google Sheet
+SHEET_TAB_NAME = "Portfolio"   # worksheet name inside the same Google Sheet as your Watchlist
+# If your watchlist page loads credentials from st.secrets["gcp_service_account"], we’ll do the same:
+SCOPES = ["https://www.googleapis.com/auth/spreadsheets",
+          "https://www.googleapis.com/auth/drive"]
 
-# ⬇️ Temporary “safe boot” so you always see *something* even if later code errors
-st.caption("✅ App booted — rendering helpers… (remove this once stable)")
-
-# ---------- Helpers ----------
-def _normalize_holdings(df: pd.DataFrame) -> pd.DataFrame:
-    if df is None or df.empty:
-        return pd.DataFrame(columns=["Ticker", "Shares", "Avg Cost"])
-    out = df.copy()
-    for col in ["Ticker", "Shares", "Avg Cost"]:
-        if col not in out.columns:
-            out[col] = pd.NA
-    out["Ticker"] = out["Ticker"].astype(str).str.upper().str.strip()
-    out["Shares"] = pd.to_numeric(out["Shares"], errors="coerce").fillna(0.0)
-    out["Avg Cost"] = pd.to_numeric(out["Avg Cost"], errors="coerce").fillna(0.0)
-    return out[["Ticker", "Shares", "Avg Cost"]]
-
-@st.cache_data(ttl=60)
-def fetch_prices_bulk(tickers: List[str]) -> Dict[str, float]:
-    tickers = sorted({t.strip().upper() for t in tickers if isinstance(t, str) and t.strip()})
-    prices: Dict[str, float] = {}
-    if not tickers:
-        return prices
-    # try intraday 1m
-    try:
-        df = yf.download(tickers=tickers, period="1d", interval="1m", group_by="ticker", progress=False, threads=True)
-@@ -203,115 +211,311 @@ def build_portfolio_history(holdings_df: pd.DataFrame, period="6mo", interval="1
-    hist_df = aligned[["Portfolio Value", "Growth %"]].reset_index()
-    hist_df.rename(columns={"index": "Date"}, inplace=True)
-
-    # Weights = latest point
-    latest_row = aligned.drop(columns=["Portfolio Value", "Growth %"], errors="ignore").iloc[-1]
-    weights_df = latest_row.reset_index()
-    weights_df.columns = ["Ticker", "Market Value"]
-    weights_df = weights_df[weights_df["Market Value"] > 0].sort_values("Market Value", ascending=False)
-
-    return hist_df, weights_df
-
-def format_money_short(x: float) -> str:
-    try:
-        x = float(x)
-    except Exception:
-        return ""
-    if x >= 1_000_000_000:
-        return f"${x/1_000_000_000:.2f}B"
-    if x >= 1_000_000:
-        return f"${x/1_000_000:.2f}M"
-    if x >= 1_000:
-        return f"${x/1_000:.2f}K"
-    return f"${x:,.0f}"
-
-
-# ---------- Google Sheets helpers ----------
-def _assert_sheets_secrets():
-    if "sheets" not in st.secrets:
-        st.error("Missing [sheets] secrets (App → Settings → Secrets).")
-        st.stop()
-    s = st.secrets["sheets"]
-    for key in ("sheet_id", "service_account"):
-        if key not in s:
-            st.error(f"Missing key in [sheets]: {key}")
-            st.stop()
-
-
-@st.cache_resource
-def get_sheet_client():
-    _assert_sheets_secrets()
-    raw = st.secrets["sheets"]["service_account"]
-    if isinstance(raw, dict):
-        info = raw
-    else:
-        def _escape_private_key_newlines(payload: str) -> str:
-            return re.sub(
-                r'(\"private_key\"\s*:\s*\")(.*?)(\")',
-                lambda m: m.group(1) + m.group(2).replace("\n", "\\n") + m.group(3),
-                payload,
-                flags=re.S,
-            )
-
-        info = json.loads(_escape_private_key_newlines(raw))
-
+# ============================
+#     GOOGLE SHEETS HELPERS
+# ============================
+@st.cache_resource(show_spinner=False)
+def get_gspread_client():
+    # Expecting the same secret you used on Watchlist:
+    # st.secrets["gcp_service_account"] = {type, project_id, private_key_id, private_key, client_email, ...}
     creds = service_account.Credentials.from_service_account_info(
-        info, scopes=["https://www.googleapis.com/auth/spreadsheets"]
+        st.secrets["gcp_service_account"], scopes=SCOPES
     )
     return gspread.authorize(creds)
 
-
-def sheets_configured() -> bool:
+@st.cache_resource(show_spinner=False)
+def get_worksheet(sheet_tab: str):
+    gc = get_gspread_client()
+    # Expect a sheet name in st.secrets just like your Watchlist page:
+    # st.secrets["settings"]["sheet_url"] points to the same Google Sheet
+    sh = gc.open_by_url(st.secrets["settings"]["sheet_url"])
     try:
-        s = st.secrets["sheets"]
-        return bool(s.get("sheet_id")) and bool(s.get("service_account"))
-    except Exception:
-        return False
-
-
-def _open_or_create_worksheet(client: gspread.Client, tab_name: str, headers: List[str]):
-    sheet = client.open_by_key(st.secrets["sheets"]["sheet_id"])
-    try:
-        ws = sheet.worksheet(tab_name)
+        ws = sh.worksheet(sheet_tab)
     except gspread.exceptions.WorksheetNotFound:
-        ws = sheet.add_worksheet(title=tab_name, rows=1000, cols=max(len(headers), 4))
-        ws.update("A1", [headers])
-        return ws
-
-    try:
-        current = ws.row_values(1)
-    except Exception:
-        current = []
-    if [c.strip() for c in current[: len(headers)]] != headers:
-        ws.update("A1", [headers])
+        ws = sh.add_worksheet(title=sheet_tab, rows=1000, cols=20)
+        # Initialize headers
+        ws.update(
+            "A1:F1",
+            [["Ticker", "Shares", "Avg Cost", "Currency", "Notes", "Last Updated"]]
+        )
     return ws
 
+def sheet_to_df(ws) -> pd.DataFrame:
+    vals = ws.get_all_values()
+    if not vals:
+        return pd.DataFrame(columns=["Ticker", "Shares", "Avg Cost", "Currency", "Notes", "Last Updated"])
+    df = pd.DataFrame(vals[1:], columns=vals[0])  # drop header row into columns
+    # Coerce numeric columns
+    for col in ["Shares", "Avg Cost"]:
+        if col in df.columns:
+            df[col] = pd.to_numeric(df[col], errors="coerce")
+    # Normalize blanks
+    for col in ["Ticker", "Currency", "Notes"]:
+        if col in df.columns:
+            df[col] = df[col].fillna("").astype(str).str.strip()
+    return df
 
-def load_portfolios_from_sheet() -> Dict[str, pd.DataFrame]:
-    if not sheets_configured():
-        return {}
+def df_to_sheet(ws, df: pd.DataFrame):
+    # Ensure required columns exist
+    base_cols = ["Ticker", "Shares", "Avg Cost", "Currency", "Notes", "Last Updated"]
+    for c in base_cols:
+        if c not in df.columns:
+            df[c] = "" if c not in ("Shares", "Avg Cost") else None
+
+    # Trim/Order columns for persistence
+    out = df[base_cols].copy()
+
+    # Replace NaN with blanks for Sheets
+    out = out.where(pd.notna(out), "")
+
+    rows = [out.columns.tolist()] + out.values.tolist()
+    # Overwrite the whole sheet range safely
+    ws.clear()
+    ws.update(f"A1:{chr(ord('A') + len(out.columns) - 1)}{len(rows)}", rows)
+
+# ============================
+#        QUOTE HELPERS
+# ============================
+@st.cache_data(ttl=45, show_spinner=False)
+def fetch_quotes(tickers: List[str]) -> pd.DataFrame:
+    """Batch fetch latest prices and day changes for tickers."""
+    tickers = [t.strip().upper() for t in tickers if t and isinstance(t, str)]
+    tickers = sorted(set(tickers))
+    if not tickers:
+        return pd.DataFrame(columns=["Ticker", "Price", "Day %", "Prev Close", "Time"])
+
+    # yfinance fast batch: use Ticker().history or download
+    # download is reliable for multiple tickers intraday
     try:
-        client = get_sheet_client()
-        ws = _open_or_create_worksheet(client, SHEET_TAB_PORTFOLIOS, PORTFOLIO_HEADERS)
-        values = ws.get_all_values()
-        if not values or len(values) <= 1:
-            return {}
-        header, *rows = values
-        df = pd.DataFrame(rows, columns=header)
-        if "Portfolio" not in df.columns:
-            return {}
-        portfolios: Dict[str, pd.DataFrame] = {}
-        df = df.replace("", pd.NA)
-        for name, group in df.groupby("Portfolio"):
-            if pd.isna(name):
-                continue
-            clean = _normalize_holdings(group[["Ticker", "Shares", "Avg Cost"]])
-            clean = clean[clean["Ticker"].astype(str).str.strip() != ""]
-            portfolios[name] = clean if not clean.empty else pd.DataFrame(columns=["Ticker", "Shares", "Avg Cost"])
-        return portfolios
+        hist = yf.download(tickers=tickers, period="1d", interval="1m", group_by="ticker", auto_adjust=False, progress=False)
     except Exception:
-        return {}
+        hist = pd.DataFrame()
 
+    quotes = []
+    ts_now = pd.Timestamp.utcnow().isoformat()
+    for t in tickers:
+        price = None
+        prev_close = None
+        day_pct = None
 
-def save_portfolios_to_sheet(portfolios: Dict[str, pd.DataFrame]) -> bool:
-    if not sheets_configured():
-        return False
-    client = get_sheet_client()
-    ws = _open_or_create_worksheet(client, SHEET_TAB_PORTFOLIOS, PORTFOLIO_HEADERS)
-    rows = []
-    for name, df in portfolios.items():
-        clean = _normalize_holdings(df)
-        if clean.empty:
-            rows.append([name, "", "", ""])
-            continue
-        for _, row in clean.iterrows():
-            shares = "" if pd.isna(row["Shares"]) else float(row["Shares"])
-            avg = "" if pd.isna(row["Avg Cost"]) else float(row["Avg Cost"])
-            rows.append([name, row["Ticker"], shares, avg])
-    data = [PORTFOLIO_HEADERS] + rows if rows else [PORTFOLIO_HEADERS]
-    try:
-        ws.batch_clear(["A2:D"])
-    except Exception:
-        pass
-    ws.update("A1", data)
-    return True
-
-
-def load_watchlist_from_sheet() -> pd.DataFrame | None:
-    if not sheets_configured():
-        return None
-    try:
-        client = get_sheet_client()
-        ws = _open_or_create_worksheet(client, SHEET_TAB_WATCHLIST, ["Ticker"])
-        values = ws.get_all_values()
-        if not values or len(values) <= 1:
-            return pd.DataFrame(columns=["Ticker"])
-        header, *rows = values
-        if "Ticker" not in header:
-            return None
-        df = pd.DataFrame(rows, columns=header)
-        df = df[["Ticker"]]
-        df["Ticker"] = df["Ticker"].astype(str).str.upper().str.strip()
-        df = df[df["Ticker"] != ""]
-        return df
-    except Exception:
-        return None
-
-
-def save_watchlist_to_sheet(df: pd.DataFrame) -> bool:
-    if not sheets_configured():
-        return False
-    client = get_sheet_client()
-    ws = _open_or_create_worksheet(client, SHEET_TAB_WATCHLIST, ["Ticker"])
-    clean = pd.DataFrame({"Ticker": df.get("Ticker", pd.Series(dtype=str))})
-    clean["Ticker"] = clean["Ticker"].astype(str).str.upper().str.strip()
-    clean = clean[clean["Ticker"] != ""]
-    data = [["Ticker"]] + [[t] for t in clean["Ticker"].tolist()]
-    try:
-        ws.batch_clear(["A2:A"])
-    except Exception:
-        pass
-    ws.update("A1", data)
-    return True
-
-
-# ---------- Defaults / State ----------
-DEFAULT = {
-    "Long-Term (USD)": pd.DataFrame([
-        {"Ticker": "QQQ", "Shares": 10, "Avg Cost": 420.0},
-        {"Ticker": "NVDA", "Shares": 2, "Avg Cost": 950.0},
-        {"Ticker": "BTC-USD", "Shares": 0.05, "Avg Cost": 60000.0},
-    ]),
-    "TFSA (CAD)": pd.DataFrame([
-        {"Ticker": "AAPL", "Shares": 5, "Avg Cost": 180.0},
-        {"Ticker": "TSLA", "Shares": 2, "Avg Cost": 210.0},
-    ]),
-}
-DEFAULT_WATCHLIST = pd.DataFrame([{"Ticker": "MSFT"}, {"Ticker": "ETH-USD"}, {"Ticker": "SPY"}])
-
-def load_state():
-    portfolios: Dict[str, pd.DataFrame] = {}
-    watch = None
-
-    sheet_portfolios = load_portfolios_from_sheet()
-    if sheet_portfolios:
-        portfolios = sheet_portfolios
-
-    sheet_watch = load_watchlist_from_sheet()
-    if sheet_watch is not None and not sheet_watch.empty:
-        watch = sheet_watch
-
-    if not portfolios and DATA_FILE.exists():
         try:
-            blob = json.loads(DATA_FILE.read_text())
-            for name, rows in blob.get("portfolios", {}).items():
-                portfolios[name] = _normalize_holdings(pd.DataFrame(rows))
-            if watch is None:
-                raw_watch = pd.DataFrame(blob.get("watchlist", []))
-                if not raw_watch.empty:
-                    watch = raw_watch
+            if isinstance(hist.columns, pd.MultiIndex):
+                # Multi-ticker frame
+                sub = hist[t]
+            else:
+                # Single ticker returns a flat frame
+                sub = hist
+            if not sub.empty:
+                last = sub.iloc[-1]
+                price = float(last["Close"])
+                # Get previous close with yfinance Ticker().info or .fast_info
+                fi = yf.Ticker(t).fast_info
+                prev_close = float(fi.get("previous_close", float("nan")))
+                # Compute day change %
+                if prev_close and not math.isnan(prev_close) and prev_close != 0:
+                    day_pct = (price / prev_close - 1) * 100.0
         except Exception:
             pass
 
-    if not portfolios:
-        portfolios = {k: v.copy() for k, v in DEFAULT.items()}
-    else:
-        portfolios = {k: v.copy() for k, v in portfolios.items()}
+        quotes.append({
+            "Ticker": t,
+            "Price": price,
+            "Day %": day_pct,
+            "Prev Close": prev_close,
+            "Time": ts_now,
+        })
 
-    if watch is None or watch.empty:
-        watch = DEFAULT_WATCHLIST.copy()
-    else:
-        watch = watch.copy()
+    qdf = pd.DataFrame(quotes)
+    return qdf
 
-    return portfolios, watch
-
-if "portfolios" not in st.session_state or "watchlist" not in st.session_state:
-    st.session_state["portfolios"], st.session_state["watchlist"] = load_state()
-
-# ---------- Top bar ----------
-colored_header_bg("📊 Multi-Portfolio Dashboard", "#0078D7", "white", 34, "center")
-left, right = st.columns([3, 2], vertical_alignment="center")
-
-with left:
-    with st.popover("➕ Add Portfolio"):
-        new_name = st.text_input("Portfolio name", placeholder="e.g., Growth (USD)")
-        if st.button("Create"):
-            name = new_name.strip()
-            if not name:
-                st.error("Please enter a name.")
-            elif name in st.session_state["portfolios"]:
-                st.warning("That portfolio already exists.")
-            else:
-                st.session_state["portfolios"][name] = pd.DataFrame(columns=["Ticker", "Shares", "Avg Cost"])
-                st.success(f"Created: {name}")
-
-with right:
-    if st.button("🔄 Refresh Prices"):
-        st.cache_data.clear()
-        st.rerun()
-    save_label = "💾 Save to Google Sheets" if sheets_configured() else "💾 Save to portfolios.json"
-    if st.button(save_label):
-        if sheets_configured():
-            saved_portfolios = save_portfolios_to_sheet(st.session_state["portfolios"])
-            saved_watchlist = save_watchlist_to_sheet(st.session_state.get("watchlist", pd.DataFrame(columns=["Ticker"])))
-            if saved_portfolios:
-                msg = "Saved portfolios to Google Sheets."
-                if saved_watchlist:
-                    msg = "Saved portfolios & watchlist to Google Sheets."
-                st.success(msg)
-            else:
-                st.error("Unable to save to Google Sheets. Check your Sheets secrets configuration.")
-        else:
-            blob = {
-                "portfolios": {k: v.to_dict(orient="records") for k, v in st.session_state["portfolios"].items()},
-                "watchlist": st.session_state["watchlist"].to_dict(orient="records"),
-            }
-            DATA_FILE.write_text(json.dumps(blob, indent=2))
-            st.success("Saved locally to portfolios.json.")
-
-# ---------- Query param / active selection ----------
-# read ?p=<portfolio_name> if provided
-def _get_query_param(key: str) -> str | None:
-    """Return first value for ?key=..., handling both new & legacy Streamlit APIs."""
+def fmt2(x, none=""):
     try:
-        raw = st.query_params.get(key)
+        if x is None or (isinstance(x, float) and math.isnan(x)):
+            return none
+        return f"{x:.2f}"
     except Exception:
-        try:
-            raw = st.experimental_get_query_params().get(key)
-        except Exception:
-            raw = None
-    if isinstance(raw, list):
-        raw = raw[0] if raw else None
-    if isinstance(raw, str):
-        return unquote(raw)
-    return None
+        return none
 
-requested = _get_query_param("p")
+# ============================
+#            UI
+# ============================
+st.title("💼 Portfolio Tracker")
 
-portfolio_names = list(st.session_state["portfolios"].keys())
-if not portfolio_names:
-    st.info("No portfolios yet. Add one from the top-left.")
-    st.stop()
+colA, colB, colC = st.columns([2,1,1])
+with colA:
+    st.caption("Edit your holdings below. The *first five columns* are editable and persist to Google Sheets.")
+with colB:
+    auto_refresh = st.toggle("Auto-refresh", value=True, help="Refresh quotes every ~30s")
+with colC:
+    interval = st.selectbox("Refresh Interval (sec)", [15, 30, 45, 60], index=1)
 
-# keep selection in session_state
-if "active_portfolio" not in st.session_state:
-    st.session_state["active_portfolio"] = portfolio_names[0]
-if requested and requested in portfolio_names:
-    st.session_state["active_portfolio"] = requested
+if auto_refresh:
+    st.autorefresh(interval=interval * 1000, key="autorefresh_portfolio")
 
-# ---------- Fetch prices (all at once) ----------
-all_tickers = []
-for df in st.session_state["portfolios"].values():
-    all_tickers.extend(_normalize_holdings(df)["Ticker"].tolist())
-if "watchlist" not in st.session_state:
-    st.session_state["watchlist"] = DEFAULT_WATCHLIST.copy()
-all_tickers.extend(st.session_state["watchlist"]["Ticker"].astype(str).str.upper().tolist())
-prices = fetch_prices_bulk(all_tickers)
+# Load from Google Sheets
+ws = get_worksheet(SHEET_TAB_NAME)
+base_df = sheet_to_df(ws)
 
-# ---------- 1) All Portfolios table (clickable) ----------
-colored_header_bg("💼 All Portfolios", "#FFD700", "#222", 26)
-summary_rows = []
-for name, df in st.session_state["portfolios"].items():
-@@ -323,59 +527,62 @@ for name, df in st.session_state["portfolios"].items():
-        "Invested": t["Invested"],
-        "Market Value": t["Value"],
-        "P/L $": t["P/L $"],
-        "P/L %": t["P/L %"],
-        "Open": f"[Open]({url})"
-    })
-summary_df = pd.DataFrame(summary_rows).sort_values("P/L %", ascending=False, ignore_index=True)
+# Ensure required columns
+for col in ["Ticker", "Shares", "Avg Cost", "Currency", "Notes", "Last Updated"]:
+    if col not in base_df.columns:
+        base_df[col] = "" if col in ("Ticker", "Currency", "Notes", "Last Updated") else None
 
-st.dataframe(
-    summary_df.style.format({
-        "Invested": money, "Market Value": money, "P/L $": money, "P/L %": "{:,.2f}%"
-    }),
-    use_container_width=True,
-)
+# Empty-state starter row
+if base_df.empty:
+    base_df = pd.DataFrame([{"Ticker":"QQQ","Shares":10,"Avg Cost":420.00,"Currency":"USD","Notes":"Sample","Last Updated":""}])
 
-st.caption("Tip: Click **Open** to jump to that portfolio. The selection is also stored in the URL (?p=...).")
-
-# ---------- Active portfolio (stable state + deep-link) ----------
-portfolio_names = list(st.session_state["portfolios"].keys())
-
-# 1) Initialize once
-if "active_portfolio" not in st.session_state:
-    st.session_state["active_portfolio"] = portfolio_names[0]
-
-# 2) If URL has ?p=..., adopt it (only if different & valid)
-qp_val = _get_query_param("p")
-if qp_val and qp_val in portfolio_names and qp_val != st.session_state["active_portfolio"]:
-    st.session_state["active_portfolio"] = qp_val
-
-# 3) Radio behaves like tabs; on change, update URL (no other code overwrites it)
-def _on_pick_change():
-    picked = st.session_state["_portfolio_picker"]
-    st.session_state["active_portfolio"] = picked
-    try:
-        st.query_params.update({"p": picked})
-    except Exception:
-        st.experimental_set_query_params(p=picked)
-
-colored_header_bg("📂 Portfolios", "#FF6F61", "white", 26)
-picked_index = portfolio_names.index(st.session_state["active_portfolio"])
-st.radio(
-    "Select a portfolio",
-    options=portfolio_names,
-    index=picked_index,
-    horizontal=True,
-    label_visibility="collapsed",
-    key="_portfolio_picker",
-    on_change=_on_pick_change,
-)
-
-active = st.session_state["active_portfolio"]
-
-
-# ---------- 3) Selected portfolio editor + breakdown ----------
-df_edit = st.data_editor(
-    _normalize_holdings(st.session_state["portfolios"][active]),
+st.subheader("Holdings (editable)")
+edited = st.data_editor(
+    base_df[["Ticker","Shares","Avg Cost","Currency","Notes","Last Updated"]],
     num_rows="dynamic",
     use_container_width=True,
-    key=f"editor_{active}",
+    hide_index=True,
     column_config={
-        "Ticker": st.column_config.TextColumn(help="e.g., AAPL, NVDA, BTC-USD"),
-        "Shares": st.column_config.NumberColumn(step=1, help="Number of shares/units"),
+        "Ticker": st.column_config.TextColumn(help="e.g., QQQ, NVDA, AAPL"),
+        "Shares": st.column_config.NumberColumn(format="%.4f", help="Can be fractional"),
+        "Avg Cost": st.column_config.NumberColumn(format="%.4f"),
+        "Currency": st.column_config.TextColumn(help="Optional (e.g., USD/CAD)"),
+        "Notes": st.column_config.TextColumn(),
+        "Last Updated": st.column_config.TextColumn(disabled=True),
+    },
+)
+
+# Save controls
+save_col1, save_col2, _ = st.columns([1,1,6])
+with save_col1:
+    do_save = st.button("💾 Save to Sheet", type="primary", use_container_width=True)
+with save_col2:
+    add_row = st.button("➕ Add Row", use_container_width=True)
+
+if add_row:
+    edited = pd.concat(
+        [edited, pd.DataFrame([{"Ticker":"", "Shares":0.0, "Avg Cost":0.0, "Currency":"", "Notes":"", "Last Updated":""}])],
+        ignore_index=True
+    )
+
+# Data cleansing: drop fully blank rows
+mask_nonblank = edited["Ticker"].astype(str).str.strip() != ""
+edited = edited[mask_nonblank].copy()
+
+# Live quotes merge
+tickers = edited["Ticker"].fillna("").astype(str).str.strip().tolist()
+qdf = fetch_quotes(tickers)
+
+merged = edited.merge(qdf, on="Ticker", how="left")
+
+# Calculations
+merged["Price"] = pd.to_numeric(merged["Price"], errors="coerce")
+merged["Shares"] = pd.to_numeric(merged["Shares"], errors="coerce")
+merged["Avg Cost"] = pd.to_numeric(merged["Avg Cost"], errors="coerce")
+
+merged["Market Value"] = merged["Price"] * merged["Shares"]
+merged["Cost Basis"]   = merged["Avg Cost"] * merged["Shares"]
+merged["P/L $"]        = merged["Market Value"] - merged["Cost Basis"]
+merged["P/L %"]        = (merged["P/L $"] / merged["Cost Basis"]) * 100
+
+# Portfolio totals
+total_mv = float(pd.to_numeric(merged["Market Value"], errors="coerce").sum())
+total_cb = float(pd.to_numeric(merged["Cost Basis"], errors="coerce").sum())
+total_pl = total_mv - total_cb
+total_pl_pct = (total_pl / total_cb) * 100 if total_cb else float("nan")
+
+# Weights
+merged["Weight %"] = (merged["Market Value"] / total_mv * 100) if total_mv else 0.0
+
+st.subheader("Live Valuation")
+# Nice compact view
+view_cols = [
+    "Ticker","Shares","Avg Cost","Price","Market Value","Cost Basis","P/L $","P/L %","Day %","Weight %"
+]
+show = merged[view_cols].copy()
+# Formatting
+for c in ["Avg Cost","Price","Market Value","Cost Basis","P/L $"]:
+    show[c] = show[c].apply(lambda x: fmt2(x))
+for c in ["P/L %","Day %","Weight %"]:
+    show[c] = show[c].apply(lambda x: ("" if x is None or (isinstance(x,float) and math.isnan(x)) else f"{x:.2f}%"))
+
+st.dataframe(show, use_container_width=True, hide_index=True)
+
+# Totals Summary
+m1, m2, m3, m4 = st.columns(4)
+m1.metric("Total Market Value", f"{fmt2(total_mv)}")
+m2.metric("Total Cost Basis", f"{fmt2(total_cb)}")
+m3.metric("Total P/L $", f"{fmt2(total_pl)}")
+m4.metric("Total P/L %", ("" if math.isnan(total_pl_pct) else f"{total_pl_pct:.2f}%"))
+
+st.caption("Prices auto-refresh based on your interval. Calculations use the latest fetched price and your saved Shares/Avg Cost.")
+
+# Persist if requested
+if do_save:
+    to_save = edited.copy()
+    to_save["Last Updated"] = pd.Timestamp.now(tz="UTC").strftime("%Y-%m-%d %H:%M:%S UTC")
+    try:
+        df_to_sheet(ws, to_save)
+        st.success("Saved to Google Sheet ✅")
+        time.sleep(0.3)
+        st.rerun()
+    except Exception as e:
+        st.error(f"Save failed: {e}")
