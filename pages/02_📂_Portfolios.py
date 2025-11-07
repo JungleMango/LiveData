@@ -413,17 +413,30 @@ def fetch_quotes(tickers: List[str]) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 def build_display(base_df: pd.DataFrame) -> Tuple[pd.DataFrame, Dict[str, Optional[float]]]:
+    # 1) Clean + keep only base columns for merge (avoid suffix collisions)
     base = sanitize_base(base_df)
-    # Ensure computed columns exist
-    for c in COMPUTED_COLUMNS:
-        if c not in base.columns:
-            base[c] = pd.NA
+    base_only = base[PORTFOLIO_HEADER].copy()
 
-    tickers = [t for t in base["Ticker"].tolist() if t]
-    qdf = fetch_quotes(tickers) if tickers else pd.DataFrame(columns=["Ticker", "Price", "Day %", "Prev Close", "Time"])
-    merged = base.merge(qdf, on="Ticker", how="left")
+    # 2) Fetch quotes
+    tickers = [t for t in base_only["Ticker"].tolist() if t]
+    if tickers:
+        qdf = fetch_quotes(tickers)  # has: Ticker, Price, Day %, Prev Close, Time
+    else:
+        qdf = pd.DataFrame(columns=["Ticker", "Price", "Day %", "Prev Close", "Time"])
 
-    # vectorized calcs
+    # 3) Merge with explicit suffixes to prevent _x/_y surprises
+    merged = base_only.merge(qdf, on="Ticker", how="left", suffixes=("", "_q"))
+
+    # 4) Ensure canonical quote columns exist (even if qdf was empty)
+    for col in ("Price", "Day %", "Prev Close"):
+        if col not in merged.columns:
+            merged[col] = pd.NA
+    # (If someone later adds similarly-named columns upstream, prefer the quote values)
+    for src, alt in (("Price", "Price_q"), ("Day %", "Day %_q"), ("Prev Close", "Prev Close_q")):
+        if alt in merged.columns:
+            merged[src] = merged[src].where(merged[src].notna(), merged[alt])
+
+    # 5) Vectorized calculations
     for col in ("Price", "Shares", "Avg Cost"):
         merged[col] = pd.to_numeric(merged[col], errors="coerce")
 
@@ -436,10 +449,21 @@ def build_display(base_df: pd.DataFrame) -> Tuple[pd.DataFrame, Dict[str, Option
     total_cb = float(pd.to_numeric(merged["Cost Basis"], errors="coerce").sum())
     total_pl = total_mv - total_cb
     total_pl_pct = (total_pl / total_cb * 100) if total_cb else None
+
     merged["Weight %"] = (merged["Market Value"] / total_mv * 100) if total_mv else 0.0
 
+    # 6) Guarantee all display columns exist in final order
+    for col in COMPUTED_COLUMNS:
+        if col not in merged.columns:
+            merged[col] = pd.NA
     display = merged[DISPLAY_COLUMNS].copy()
-    totals = {"total_mv": total_mv, "total_cb": total_cb, "total_pl": total_pl, "total_pl_pct": total_pl_pct}
+
+    totals = {
+        "total_mv": total_mv,
+        "total_cb": total_cb,
+        "total_pl": total_pl,
+        "total_pl_pct": total_pl_pct,
+    }
     return display, totals
 
 # ============================
