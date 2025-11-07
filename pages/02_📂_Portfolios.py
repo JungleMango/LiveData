@@ -33,8 +33,12 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ============================
-#     SHEETS AUTH (same as Watchlist)
+#     SHEETS AUTH (same as portfolio)
 # ============================
+
+def signature(df: pd.DataFrame) -> int:
+    tickers = df["Ticker"].tolist() if "Ticker" in df.columns else []
+    return hash(tuple(tickers))
 
 def _assert_sheets_secrets():
     if "sheets" not in st.secrets:
@@ -45,6 +49,13 @@ def _assert_sheets_secrets():
         if k not in s:
             st.error(f"Missing key in [sheets]: {k}")
             st.stop()
+
+def sheets_configured() -> bool:
+    try:
+        s = st.secrets["sheets"]
+        return bool(s.get("sheet_id")) and bool(s.get("service_account"))
+    except Exception:
+        return False
 
 @st.cache_resource
 def get_sheet_client():
@@ -101,6 +112,24 @@ def _normalize_portfolio_df(df: pd.DataFrame) -> pd.DataFrame:
 
     # Canonical column order
     return df[PORTFOLIO_HEADER]
+
+def get_sheet_snapshot() -> pd.DataFrame:
+    """Read current tickers from the sheet (robust, normalized)."""
+    try:
+        client = get_sheet_client()
+        ws = _open_or_create_worksheet(client, st.secrets["sheets"]["sheet_id"], SHEET_TAB_NAME)
+        values = ws.get_all_values()
+        if not values:
+            return pd.DataFrame({"Ticker": []})
+        header, *rows = values
+        if "Ticker" not in header:
+            tickers = [r[0] for r in rows if r]
+            return normalize_watch_df(pd.DataFrame({"Ticker": tickers}))
+        df = pd.DataFrame(rows, columns=header)
+        return normalize_watch_df(df)
+    except Exception:
+        return pd.DataFrame({"Ticker": []})
+
 
 def get_portfolio_snapshot() -> pd.DataFrame:
     """Read current portfolio rows from the sheet (robust & normalized)."""
@@ -332,3 +361,48 @@ m3.metric("Total P/L $", f"{fmt2(total_pl)}")
 m4.metric("Total P/L %", ("" if (isinstance(total_pl_pct,float) and math.isnan(total_pl_pct)) else f"{total_pl_pct:.2f}%"))
 
 st.caption("Prices refresh using your interval. P/L uses latest fetched price against your Shares and Avg Cost.")
+
+
+
+
+
+
+
+# ============================
+#      SAVE / RELOAD / REFRESH
+# ============================
+c1, c2, c3 = st.columns([1,1,1])
+with c1:
+    if st.button("💾 Save Now"):
+        if st.session_state["portfolio"].empty:
+            st.warning("Won’t overwrite with an empty list. Add at least one ticker.")
+        elif save_portfolio_to_sheet(st.session_state["portfolio"], prevent_empty=True):
+            st.success("Saved to Google Sheets.")
+            st.session_state["portfolio_saved_sig"] = signature(st.session_state["portfolio"])
+
+with c2:
+    if st.button("↩️ Reload from Sheet"):
+        st.session_state["portfolio"] = get_sheet_snapshot()
+        st.session_state["portfolio_saved_sig"] = signature(st.session_state["portfolio"])
+        st.rerun()
+
+with c3:
+    if st.button("🔄 Refresh Data (clear cache)"):
+        st.cache_data.clear()
+        st.rerun()
+
+# ============================
+#          AUTOSAVE SAFE
+# ============================
+current_sig = signature(st.session_state["portfolio"])
+last_saved_sig = st.session_state.get("portfolio_saved_sig")
+if (
+    sheets_configured()
+    and last_saved_sig is not None
+    and current_sig != last_saved_sig
+    and not st.session_state["portfolio"].empty
+    and time.time() - st.session_state["_wl_last_edit_ts"] > 1.5
+):
+    if save_portfolio_to_sheet(st.session_state["portfolio"], prevent_empty=True):
+        st.toast("Autosaved to Google Sheets")
+        st.session_state["portfolio_saved_sig"] = current_sig
