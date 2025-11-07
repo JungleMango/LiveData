@@ -61,6 +61,23 @@ def sheets_configured() -> bool:
     except Exception:
         return False
 
+def _session_safe_name(x) -> str:
+    """Coerce any portfolio identifier to a plain string for session_state."""
+    try:
+        # accept simple primitives
+        if isinstance(x, (str, int, float, bool)) or x is None:
+            return "" if x is None else str(x)
+        # common objects: gspread Worksheet has .title
+        if hasattr(x, "title"):
+            return str(getattr(x, "title"))
+        # pandas Series/DataFrame → prefer their 'name' or str()
+        if hasattr(x, "name") and x.name is not None:
+            return str(x.name)
+        return str(x)
+    except Exception:
+        return ""
+
+
 def _assert_sheets_secrets() -> None:
     if "sheets" not in st.secrets:
         st.error("Missing [sheets] configuration (App → Settings → Secrets).")
@@ -487,16 +504,21 @@ with add_col:
         new_name = st.text_input("New portfolio name", placeholder="e.g., Retirement", label_visibility="collapsed")
         create_btn = st.form_submit_button("➕ Add Portfolio", use_container_width=True)
         if create_btn:
-            candidate = new_name.strip()
+            candidate = _session_safe_name(new_name).strip()
             if not candidate:
                 st.warning("Enter a name to create a portfolio.")
             elif candidate in portfolio_names:
                 st.warning("A portfolio with that name already exists.")
             elif create_portfolio(candidate):
                 st.cache_data.clear()
-                st.session_state["selected_portfolio"] = candidate
+                st.session_state["selected_portfolio"] = _session_safe_name(candidate)
                 st.success("Portfolio created ✅")
                 st.rerun()
+            elif create_portfolio(candidate):
+                 st.cache_data.clear()
+                 st.session_state["selected_portfolio"] = candidate   # now guaranteed plain str
+                 st.success("Portfolio created ✅")
+                 st.rerun()
             else:
                 st.warning("Unable to create the portfolio. Check your configuration.")
 
