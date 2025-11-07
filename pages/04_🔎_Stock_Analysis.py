@@ -5,9 +5,9 @@ import gspread
 from google.oauth2 import service_account
 
 st.set_page_config(page_title="Sheet Editor (Ticker-only)", layout="wide")
-st.title("✏️ Edit only the Ticker column")
+st.title("Portfolio Holdings")
 
-# ---- Auth (uses your Streamlit Secrets) ----
+# ---- Auth (uses your Streamlit Secrets) -----------------------------------
 CREDS = service_account.Credentials.from_service_account_info(
     st.secrets["gcp_service_account"],
     scopes=[
@@ -17,6 +17,8 @@ CREDS = service_account.Credentials.from_service_account_info(
 )
 SHEET_ID = st.secrets["sheets"]["sheet_id"]
 TAB_NAME = st.sidebar.text_input("Worksheet (tab) name", value="Portfolio")
+
+# ----------------------------------------------------------------------------
 
 @st.cache_data(ttl=30)
 def load_sheet(sheet_id: str, tab: str):
@@ -28,7 +30,8 @@ def load_sheet(sheet_id: str, tab: str):
     values = ws.get_all_values()  # list[list]
     if not values:
         return pd.DataFrame(), [], [], None
-
+    
+    # Letting stream lit know that header is on row 1
     header = values[0]
     data = values[1:]
 
