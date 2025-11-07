@@ -348,6 +348,9 @@ st.title("📂 Portfolios")
 
 store = _load_portfolio_store()
 portfolio_names = list_portfolios(store)
+pending_selection = st.session_state.pop("pending_selected_portfolio", None)
+if pending_selection:
+    st.session_state["selected_portfolio"] = pending_selection
 if not portfolio_names:
     store = _load_portfolio_store()
     portfolio_names = list_portfolios(store)
@@ -376,6 +379,7 @@ with add_col:
                 st.warning("A portfolio with that name already exists.")
             elif create_portfolio(candidate, store):
                 st.session_state.pop(f"portfolio_data::{candidate}", None)
+                st.session_state["pending_selected_portfolio"] = candidate
                 st.session_state["selected_portfolio"] = candidate
                 st.session_state.pop("confirm_delete_target", None)
                 st.rerun()
