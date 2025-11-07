@@ -21,5 +21,5 @@ def read_sheet(sheet_id: str, tab: str):
     rows = ws.get_all_records()   # list[dict]
     return pd.DataFrame(rows)
 
-df = read_sheet(SHEET_ID, "Watchlist")  # change to your tab name
+df = read_sheet(SHEET_ID, "Portfolio")  # change to your tab name
 st.dataframe(df, use_container_width=True)
