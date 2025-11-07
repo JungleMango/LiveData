@@ -33,6 +33,21 @@ SHEET_TAB_NAME = "Watchlist"  # worksheet name inside your Google Sheet
 # ============================
 #         UI / UTIL
 # ============================
+def color_by_sign(val):
+    """Return CSS to color numbers by sign."""
+    if pd.isna(val):
+        return ""
+    try:
+        v = float(val)
+    except Exception:
+        return ""
+    if v > 0:
+        return "color: #10B981; font-weight: 600;"   # green
+    if v < 0:
+        return "color: #EF4444; font-weight: 600;"   # red
+    return "color: #6B7280;"                         # gray for zero
+
+
 def colored_header_bg(
     title: str,
     bg_color: str = "#8A2BE2",
@@ -76,6 +91,14 @@ def colored_header_bg(
         """,
         unsafe_allow_html=True,
     )
+def with_arrow(x):
+    if pd.isna(x): return ""
+    x = float(x)
+    return f"▲ {x:.2f}%" if x > 0 else (f"▼ {abs(x):.2f}%" if x < 0 else f"{x:.2f}%")
+
+view["Daily Δ"] = view["Daily Change %"].apply(with_arrow)
+view["7D Δ"]    = view["7D % Change"].apply(with_arrow)
+
 
 def normalize_watch_df(df: pd.DataFrame) -> pd.DataFrame:
     out = pd.DataFrame({"Ticker": df.get("Ticker", pd.Series([], dtype=str))})
@@ -352,6 +375,22 @@ edited = st.data_editor(
     },
     disabled=["Name", "Live Price", "Daily Change %", "7D % Change", "30D Trend"],
 )
+
+st.markdown("#### 📋 Styled View")
+styled = (
+    view
+    .copy()
+    .style
+    .format({
+        "Live Price": "${:,.2f}",
+        "Daily Change %": "{:,.2f}%",
+        "7D % Change": "{:,.2f}%",
+    })
+    .applymap(color_by_sign, subset=["Daily Change %", "7D % Change"])
+)
+
+st.dataframe(styled, use_container_width=True)
+
 
 # Persist in-memory
 st.session_state["watchlist"] = normalize_watch_df(edited[["Ticker"]])
