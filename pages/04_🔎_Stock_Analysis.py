@@ -16,7 +16,7 @@ CREDS = service_account.Credentials.from_service_account_info(
     ],
 )
 SHEET_ID = st.secrets["sheets"]["sheet_id"]           # from your [sheets] block
-TAB_NAME = st.sidebar.text_input("Worksheet (tab) name", value="Watchlist")
+TAB_NAME = st.sidebar.text_input("Worksheet (tab) name", value="portfolio")
 
 @st.cache_data(ttl=30)
 def load_sheet(sheet_id: str, tab: str) -> pd.DataFrame:
