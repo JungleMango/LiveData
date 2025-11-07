@@ -179,7 +179,7 @@ if auto_refresh:
     now = time.time()
     if now - last_refresh > interval:
         st.session_state["last_refresh"] = now
-        st.experimental_rerun()
+        st.rerun()
 
 
 # Load from Google Sheets
