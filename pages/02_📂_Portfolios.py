@@ -1,4 +1,4 @@
-# 02_📂_Portfolios.py
+
 # Live Portfolio Tracker — local JSON persistence + optimized quotes
 
 import json
@@ -479,4 +479,3 @@ pl_pct = totals["total_pl_pct"]
 m4.metric("Total P/L %", "" if pl_pct is None else f"{pl_pct:.2f}%")
 
 st.caption("Prices refresh on the selected interval. P/L uses the latest price against your Shares and Avg Cost.")
-portfolios.json
