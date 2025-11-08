@@ -3,9 +3,9 @@ import pandas as pd
 
 First_Table = pd.DataFrame(
     [
-        {"command": "st.selectbox", "rating": 4, "is_widget": True},
-        {"command": "st.balloons", "rating": 5, "is_widget": False},
-        {"command": "st.time_input", "rating": 3, "is_widget": True},
+        {"Ticker": "NVDA", "price": 4, "is_widget": True},
+        {"Ticker": "TSLA", "price": 5, "is_widget": False},
+        {"Ticker": "QQQ", "price": 3, "is_widget": True},
     ]
 )
 
