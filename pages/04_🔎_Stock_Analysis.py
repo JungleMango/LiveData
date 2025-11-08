@@ -9,4 +9,4 @@ First_Table = pd.DataFrame(
     ]
 )
 
-st.dataframe(First_Table, use_container_width=True)
+st.dataframe(First_Table, use_container_width=True,hide_index=True)
