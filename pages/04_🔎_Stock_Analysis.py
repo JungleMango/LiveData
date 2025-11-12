@@ -6,7 +6,7 @@ api_key = 'beUiETWAQ7Ert13VnAd7qkiEqjT1GrFC'
 base_url = 'https://financialmodelingprep.com'
 data_type = 'income-statement'
 print("Input ticker symbol")
-ticker = st.text_input()
+ticker = st.text_input("Enter Ticker")
 url = f'{base_url}/stable/{data_type}?symbol={ticker}&apikey={api_key}'
 
 response = requests.get(url)
