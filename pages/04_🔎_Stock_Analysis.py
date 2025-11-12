@@ -1,14 +1,16 @@
 import streamlit as st
-from st_gsheets_connection import GSheetsConnection  # recommended package
+import requests
+import pandas as pd 
 
-conn = st.connection("gsheets", type=GSheetsConnection)
+api_key = 'beUiETWAQ7Ert13VnAd7qkiEqjT1GrFC'
+base_url = 'https://financialmodelingprep.com'
+data_type = 'income-statement'
+ticker = 'AAPL'
+url = f'{base_url}/stable/{data_type}?symbol={ticker}&apikey={api_key}'
 
-df = conn.read(
-    spreadsheet="https://docs.google.com/spreadsheets/d/1CKDZqZIZ6WTbHGRuTf47DUxtlsSrBC5buZ6u8soQ-rw/edit",  # or just "YOUR_SHEET_ID"
-    worksheet="Watchlist",
-    ttl="10m",
-    usecols=[0, 1],
-    nrows=3,
-)
+response = requests.get(url)
+data = response.json()
 
-st.write(df)
+df = pd.DataFrame(data)
+
+df
