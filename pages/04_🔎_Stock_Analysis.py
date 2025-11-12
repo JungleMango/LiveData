@@ -11,6 +11,6 @@ url = f'{base_url}/stable/{data_type}?symbol={ticker}&apikey={api_key}'
 response = requests.get(url)
 data = response.json()
 
-df = pd.DataFrame(data)
+df = pd.DataFrame(data).T
 
 df
