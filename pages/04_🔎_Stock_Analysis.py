@@ -13,19 +13,18 @@ ticker = st.text_input("Enter Ticker")
 @st.cache_data(ttl=86400)
 def fetch_income(ticker):
     Inc_Stat_Url = f'{base_url}/stable/{data_type}?symbol={ticker}&apikey={api_key}'
-    return requests.get(Inc_Stat_Url).json()
+    Income = requests.get(Inc_Stat_Url)
+    return Income.json()
 
 
 
 
 
-IST = pd.DataFrame(fetch_income).T
+IST = pd.DataFrame(fetch_income(ticker)).T
 
 
 
 
 ## UI ##
-st.subheader("Live Quote")
-st.table(QP, border=("horizontal"))
 st.subheader("Income statement of the company")
 st.table(IST, border=("horizontal"))
