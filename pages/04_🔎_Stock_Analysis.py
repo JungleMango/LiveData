@@ -30,3 +30,7 @@ IST = pd.DataFrame(fetch_income(ticker))
 st.subheader("Income statement")
 
 st.dataframe(IST)
+
+EPS = IST['eps']
+
+EPS
