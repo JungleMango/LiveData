@@ -14,7 +14,7 @@ Quote_Url = f'{base_url}/stable/quote?symbol={ticker}&apikey=beUiETWAQ7Ert13VnAd
 Live_Quote = requests.get(Quote_Url)
 Income_Statement = requests.get(Inc_Stat_Url)
 
-
+st.subheader("Income statement of the company")
 Income_Statement_Table = Income_Statement.json()
 Quote_Price = Live_Quote.json()
 
