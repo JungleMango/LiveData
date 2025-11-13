@@ -15,7 +15,7 @@ ticker = st.text_input("Enter Ticker")
 # Function will return the data from specified website.
 @st.cache_data(ttl=86400)
 def fetch_income(ticker):
-    Inc_Stat_Url = f'{base_url}/stable/{data_type}?symbol={ticker}?period=quarter&apikey={api_key}' # variable to created url
+    Inc_Stat_Url = f'{base_url}/stable/{data_type}?symbol={ticker}&apikey={api_key}' # variable to created url
     Income = requests.get(Inc_Stat_Url) # assigning variable to data requested from website
     return Income.json() # saving result as json
 
