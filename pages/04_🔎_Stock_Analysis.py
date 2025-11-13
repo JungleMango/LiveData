@@ -29,4 +29,4 @@ IST = pd.DataFrame(fetch_income(ticker)).T
 ## UI ##
 st.subheader("Income statement")
 
-st.table(IST)
+st.dataframe(IST)
