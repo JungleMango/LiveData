@@ -22,7 +22,7 @@ def fetch_income(ticker):
 
 
 IST = pd.DataFrame(fetch_income(ticker),
-                   hide_index = "true").T
+                   hide_index = None).T
 
 
 
