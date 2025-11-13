@@ -5,7 +5,7 @@ import pandas as pd
 api_key = 'beUiETWAQ7Ert13VnAd7qkiEqjT1GrFC'
 base_url = 'https://financialmodelingprep.com'
 data_type = 'income-statement'
-ticker = st.text_input("Enter Ticker", width='content')
+ticker = st.text_input("Enter Ticker")
 
 
 
