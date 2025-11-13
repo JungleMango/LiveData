@@ -34,4 +34,6 @@ IST = pd.DataFrame(fetch_income(ticker))
 st.subheader("Income statement")
 st.dataframe(IST, hide_index=True)
 EPS = IST[["date","eps"]]
-EPS
+
+st.markdown("EPS per quarter")
+st.dataframe(EPS, hide_index=True)
