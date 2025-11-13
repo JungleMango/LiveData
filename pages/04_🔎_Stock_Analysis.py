@@ -8,7 +8,7 @@ data_type = 'income-statement'
 ticker = st.text_input("Enter Ticker")
 
 Inc_Stat_Url = f'{base_url}/stable/{data_type}?symbol={ticker}&apikey={api_key}'
-Quote_Url = f'https://financialmodelingprep.com/stable/quote?symbol=AAPL&apikey=beUiETWAQ7Ert13VnAd7qkiEqjT1GrFC'
+Quote_Url = f'{base_url}/stable/quote?symbol={ticker}L&apikey=beUiETWAQ7Ert13VnAd7qkiEqjT1GrFC'
 
 
 Live_Quote = requests.get(Quote_Url)
