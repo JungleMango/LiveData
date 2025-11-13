@@ -21,11 +21,12 @@ def fetch_income(ticker):
 
 
 
-IST = pd.DataFrame(fetch_income(ticker).T
+IST = pd.DataFrame(fetch_income(ticker)).T
 
 
 
 
 ## UI ##
 st.subheader("Income statement")
+
 st.table(IST, border=("horizontal"))
