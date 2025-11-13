@@ -38,9 +38,12 @@ EPS_table = Income_statement_table[["date","eps"]]
     # UI / STYLING #
 #----------------------------#
 
-st.subheader("Income statement")
+st.markdown("Income statement")
 st.dataframe(Income_statement_table, hide_index=True)
 
 
 st.markdown("EPS per quarter")
 st.dataframe(EPS_table, hide_index=True)
+
+st.markdown("Histoical prices")
+st.dataframe(Quote_table, hide_index=True)
