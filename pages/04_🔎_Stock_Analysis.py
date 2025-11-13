@@ -5,13 +5,22 @@ import pandas as pd
 api_key = 'beUiETWAQ7Ert13VnAd7qkiEqjT1GrFC'
 base_url = 'https://financialmodelingprep.com'
 data_type = 'income-statement'
-print("Input ticker symbol")
 ticker = st.text_input("Enter Ticker")
-url = f'{base_url}/stable/{data_type}?symbol={ticker}&apikey={api_key}'
 
-response = requests.get(url)
-data = response.json()
+Inc_Stat_Url = f'{base_url}/stable/{data_type}?symbol={ticker}&apikey={api_key}'
+Quote_Url = f'https://financialmodelingprep.com/stable/quote?symbol=AAPL&apikey=beUiETWAQ7Ert13VnAd7qkiEqjT1GrFC'
 
-df = pd.DataFrame(data).T
 
-df
+Live_Quote = requests.get(Quote_Url)
+Income_Statement = requests.get(Inc_Stat_Url)
+
+
+Income_Statement_Table = Income_Statement.json()
+Quote_Price = Live_Quote.json()
+
+IST = pd.DataFrame(Income_Statement_Table).T
+QP = pd.DataFrame(Quote_Price)
+
+
+IST
+QP
