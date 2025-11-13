@@ -22,14 +22,9 @@ def fetch_income(ticker):
     return Income.json() # saving result as json
 
 
-# https://financialmodelingprep.com/stable/income-statement?symbol=NVDA&limit=50&period=quarter&apikey=beUiETWAQ7Ert13VnAd7qkiEqjT1GrFC
-# https://financialmodelingprep.com/stable/analyst-estimates?symbol=NVDA&period=quarter&limit=50&apikey=beUiETWAQ7Ert13VnAd7qkiEqjT1GrFC
-# {base_url}/stable/{data_type}?symbol={ticker}&period=quarter&limit={N}&apikey={api_key}
-
 #----------------------------#
     # EXECUTING FUNCTIONS #
 #----------------------------#
-st.write(fetch_income(ticker))
 IST = pd.DataFrame(fetch_income(ticker))
 
 #----------------------------#
