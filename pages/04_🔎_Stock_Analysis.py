@@ -22,5 +22,5 @@ IST = pd.DataFrame(Income_Statement_Table).T
 QP = pd.DataFrame(Quote_Price)
 
 
-IST
+st.table(IST, border=("horizontal"))
 QP
