@@ -21,7 +21,7 @@ Income_Statement_Table = Income_Statement.json()
 
 
 
-QP = pd.DataFrame(Quote_Price)
+QP = pd.DataFrame(Quote_Price).T
 IST = pd.DataFrame(Income_Statement_Table).T
 
 
