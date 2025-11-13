@@ -21,19 +21,26 @@ def fetch_income(ticker):
     Income = requests.get(Inc_Stat_Url) # assigning variable to data requested from website
     return Income.json() # saving result as json
 
+@st.cache_data(ttl=100)
+def fetch_quote(ticker):
+    Hquotes_url = f'{base_url}/stable/historical-price-eod/light?symbol={ticker}&from=2017-11-13&to=2025-11-13&apikey=b{api_key}'
+    H_Quotes = requests.get(Hquotes_url)
+    return H_Quotes.json()
 
 #----------------------------#
     # EXECUTING FUNCTIONS #
 #----------------------------#
-IST = pd.DataFrame(fetch_income(ticker))
+Income_statement_table = pd.DataFrame(fetch_income(ticker))
+Quote_table = pd.DataFrame(fetch_quote(ticker))
+EPS_table = Income_statement_table[["date","eps"]]
 
 #----------------------------#
     # UI / STYLING #
 #----------------------------#
 
 st.subheader("Income statement")
-st.dataframe(IST, hide_index=True)
-EPS = IST[["date","eps"]]
+st.dataframe(Income_statement_table, hide_index=True)
+
 
 st.markdown("EPS per quarter")
-st.dataframe(EPS, hide_index=True)
+st.dataframe(EPS_table, hide_index=True)
