@@ -23,7 +23,7 @@ def fetch_income(ticker):
 
 @st.cache_data(ttl=100)
 def fetch_quote(ticker):
-    Hquotes_url = f'{base_url}/stable/historical-price-eod/light?symbol={ticker}&from=2017-11-13&to=2025-11-13&apikey=b{api_key}'
+    Hquotes_url = f'{base_url}/stable/historical-price-eod/light?symbol={ticker}&from=2017-11-13&to=2025-11-13&apikey={api_key}'
     H_Quotes = requests.get(Hquotes_url)
     return H_Quotes.json()
 
