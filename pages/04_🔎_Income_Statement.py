@@ -64,4 +64,6 @@ st.markdown("Histoical prices")
 st.dataframe(Quote_table, hide_index=True)
 
 st.subheader("Price matched to EPS dates")
+analysis_table = analysis_table.drop(columns=["symbol"])
 st.dataframe(analysis_table, hide_index=True)
+
