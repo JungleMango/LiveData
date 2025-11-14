@@ -46,6 +46,8 @@ analysis_table = pd.merge_asof(
       # match last price <= EPS date
 )
 analysis_table["PE Ratio"] = analysis_table["price"] / analysis_table["eps"]
+analysis_table["Return Expectation"] = analysis_table["eps"] / analysis_table["PE Ratio"]
+
 
 
 
