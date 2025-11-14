@@ -34,13 +34,20 @@ Income_statement_table = pd.DataFrame(fetch_income(ticker))
 Quote_table = pd.DataFrame(fetch_quote(ticker))
 EPS_table = Income_statement_table[["date","eps"]]
 
+EPS_table["date"] = pd.to_datetime(EPS_table["date"])
+Quote_table["date"] = pd.to_datetime(Quote_table["date"])
+EPS_table = EPS_table.sort_values("date")
+Quote_table = Quote_table.sort_values("date")
 
 analysis_table = pd.merge_asof(
-    EPS_table.sort_values("date"),
-    Quote_table.sort_values("date"),
+    EPS_table,
+    Quote_table,
     on="date",
-    direction="backward"
+    direction="backward"  # match last price <= EPS date
 )
+
+
+
 
 #----------------------------#
     # UI / STYLING #
@@ -56,4 +63,5 @@ st.dataframe(EPS_table, hide_index=True)
 st.markdown("Histoical prices")
 st.dataframe(Quote_table, hide_index=True)
 
-st.dataframe(analysis_table)
+st.subheader("Price matched to EPS dates")
+st.dataframe(analysis_table, hide_index=True)
