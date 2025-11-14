@@ -34,7 +34,7 @@ Income_statement_table = pd.DataFrame(fetch_income(ticker))
 Quote_table = pd.DataFrame(fetch_quote(ticker))
 EPS_table = Income_statement_table[["date","eps"]]
 
-analysis_table = pd.merge(EPS_table, Quote_table, on="date", direction="backward")
+analysis_table = pd.merge_asof(EPS_table, Quote_table, on="date", direction="backward")
 
 #----------------------------#
     # UI / STYLING #
