@@ -17,10 +17,10 @@ time = 'quarter'
 # Function will return the data from specified website.
 @st.cache_data(ttl=86400)
 def fetch_income(ticker):
-    Inc_Stat_Url = f'{base_url}/stable/{data_type}?symbol={ticker}&limit={years}&period={time}&apikey={api_key}' # variable to created url
+    Inc_Stat_Url = f'{base_url}/stable/{data_type}?symbol={ticker}&limit={years}&apikey={api_key}' # variable to created url
     Income = requests.get(Inc_Stat_Url) # assigning variable to data requested from website
     return Income.json() # saving result as json
-
+# {base_url}/stable/{data_type}?symbol={ticker}&limit={years}&period={time}&apikey={api_key}
 @st.cache_data(ttl=100)
 def fetch_quote(ticker):
     Hquotes_url = f'{base_url}/stable/historical-price-eod/light?symbol={ticker}&from=2017-11-13&to=2025-11-13&apikey={api_key}'
