@@ -45,7 +45,7 @@ analysis_table = pd.merge_asof(
     on="date"
       # match last price <= EPS date
 )
-
+analysis_table["PE Ratio"]=["price"]/["EPS"]
 
 
 
@@ -67,4 +67,3 @@ st.subheader("Price matched to EPS dates")
 analysis_table = analysis_table.drop(columns=["symbol"])
 st.dataframe(analysis_table, hide_index=True)
 
-st.plotly_chart(analysis_table)
