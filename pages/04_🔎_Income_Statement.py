@@ -42,8 +42,8 @@ Quote_table = Quote_table.sort_values("date")
 analysis_table = pd.merge_asof(
     EPS_table,
     Quote_table,
-    on="date",
-    direction="backward"  # match last price <= EPS date
+    on="date"
+      # match last price <= EPS date
 )
 
 
