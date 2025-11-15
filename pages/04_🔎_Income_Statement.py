@@ -36,7 +36,7 @@ Income_statement_table
 Quote_table = pd.DataFrame(fetch_quote(ticker))
 EPS_table = Income_statement_table[["Date","Eps"]]
 
-EPS_table["Date"] = pd.to_datetime(EPS_table["Date"])
+#EPS_table["Date"] = pd.to_datetime(EPS_table["Date"])
 Quote_table["Date"] = pd.to_datetime(Quote_table["Date"])
 EPS_table = EPS_table.sort_values("Date")
 Quote_table = Quote_table.sort_values("Date")
