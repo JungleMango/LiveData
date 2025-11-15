@@ -31,32 +31,9 @@ def fetch_quote(ticker):
     # EXECUTING FUNCTIONS #
 #----------------------------#
 
-if ticker:
-    # ----- Income statement -----
-    raw_income = fetch_income(ticker)
-
-    # If API sent an error dict like {"Error Message": "..."}
-    if isinstance(raw_income, dict) and "Error Message" in raw_income:
-        st.error(raw_income["Error Message"])
-        st.stop()
-
-    if isinstance(raw_income, list):
-        # Normal case: list of periods
-        Income_statement_table = pd.DataFrame(raw_income)
-    elif isinstance(raw_income, dict):
-        # Sometimes wrapped, sometimes a single record
-        if "financials" in raw_income and isinstance(raw_income["financials"], list):
-            Income_statement_table = pd.DataFrame(raw_income["financials"])
-        else:
-            # Treat as one row
-            Income_statement_table = pd.DataFrame([raw_income])
-    else:
-        st.error(f"Unexpected income response type: {type(raw_income)}")
-        st.stop()
 
 
-
-
+Income_statement_table = pd.DataFrame(fetch_quote(ticker))
 Quote_table = pd.DataFrame(fetch_quote(ticker))
 EPS_table = Income_statement_table[["date","eps"]]
 
