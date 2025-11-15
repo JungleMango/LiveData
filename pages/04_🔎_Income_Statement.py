@@ -6,7 +6,7 @@ api_key = 'beUiETWAQ7Ert13VnAd7qkiEqjT1GrFC'
 base_url = 'https://financialmodelingprep.com'
 data_type = 'income-statement'
 ticker = st.text_input("Enter Ticker")
-years = ''
+years = '120'
 time = 'quarter'
 
 #----------------------------#
