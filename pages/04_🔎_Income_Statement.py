@@ -31,8 +31,6 @@ def fetch_quote(ticker):
     # EXECUTING FUNCTIONS #
 #----------------------------#
 
-
-
 Income_statement_table = pd.DataFrame(fetch_quote(ticker))
 Quote_table = pd.DataFrame(fetch_quote(ticker))
 EPS_table = Income_statement_table[["date","eps"]]
@@ -50,6 +48,8 @@ analysis_table = pd.merge_asof(
 )
 analysis_table["PE Ratio"] = analysis_table["price"] / analysis_table["eps"]
 analysis_table["Return Expectation"] = analysis_table["eps"] / analysis_table["PE Ratio"]
+analysis_table["Return expectation"] = (analysis_table["Return expectation"] * 100).round(2).astype(str) + "%"
+
 
 
 #----------------------------#
