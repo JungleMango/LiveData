@@ -78,6 +78,6 @@ st.markdown("Histoical prices")
 st.dataframe(Quote_table, hide_index=True)
 
 st.subheader(" Analysis table: Yearly P/E")
-analysis_table = analysis_table.drop(columns=["symbol"])
+analysis_table = analysis_table.drop(columns=["symbol","date_y","Date","volume","TTM_Return"])
 st.dataframe(analysis_table, hide_index=True)
 
