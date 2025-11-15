@@ -32,7 +32,6 @@ def fetch_quote(ticker):
 #----------------------------#
 
 Income_statement_table = pd.DataFrame(fetch_income(ticker))
-st.write(Income_statement_table)
 Quote_table = pd.DataFrame(fetch_quote(ticker))
 EPS_table = Income_statement_table[["date","eps"]]
 
@@ -70,14 +69,14 @@ analysis_table["TTM Annualized (%)"] = (
 st.markdown("Income statement")
 st.dataframe(Income_statement_table, hide_index=True)
 
-
 st.markdown("EPS per quarter")
 st.dataframe(EPS_table, hide_index=True)
 
 st.markdown("Histoical prices")
 st.dataframe(Quote_table, hide_index=True)
 
-st.subheader(" Analysis table: Yearly P/E")
+st.markdown(" Analysis table: Quarterly EPS and Return Expectations")
+st.markdown(" P/E is the amount investors want to pay to get a return of eps (Expeted Return)")
 analysis_table = analysis_table.drop(columns=["symbol","date_y","Date","volume","TTM_Return"])
 st.dataframe(analysis_table, hide_index=True)
 
