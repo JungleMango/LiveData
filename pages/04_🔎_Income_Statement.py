@@ -33,10 +33,11 @@ def section_title(title):
         <div style="
             margin-top: 30px;
             padding: 12px 16px;
-            background-color: #f5f7fa;
+            background-color: #2a915e;
             border-left: 4px solid #4a90e2;
             border-radius: 4px;
             font-size: 20px;
+            text-align: center;
             font-weight: 600;
         ">
             {title}
