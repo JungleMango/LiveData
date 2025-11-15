@@ -56,11 +56,8 @@ analysis_table["TTM_Return"] = (
     (1 + analysis_table["Return Expectation"]).rolling(4).apply(lambda x: x.prod()) - 1
 )
 # Nicely formatted column
-analysis_table["TTM Annualized (%)"] = (
-    analysis_table["TTM_Return"] * 100
-).round(2).astype(str) + "%"
-
-
+analysis_table["TTM Annualized (%)"] = (analysis_table["TTM_Return"] * 100).round(2).astype(str) + "%"
+analysis_table["Return Expectation (%)"] = (analysis_table["Return Expectation"] * 100).round(2).astype(str)+ "%"
 
 #----------------------------#
     # UI / STYLING #
