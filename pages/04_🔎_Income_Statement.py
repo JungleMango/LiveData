@@ -23,7 +23,7 @@ def fetch_income(ticker):
 # {base_url}/stable/{data_type}?symbol={ticker}&limit={years}&period={time}&apikey={api_key}
 @st.cache_data(ttl=100)
 def fetch_quote(ticker):
-    Hquotes_url = f'{base_url}/stable/historical-price-eod/light?symbol={ticker}&limit={years}&period={time}from=2017-11-13&to=2025-11-13&apikey={api_key}'
+    Hquotes_url = f'https://financialmodelingprep.com/stable/income-statement?symbol={ticker}&limit=120&period=quarter&apikey=beUiETWAQ7Ert13VnAd7qkiEqjT1GrFC
     H_Quotes = requests.get(Hquotes_url)
     return H_Quotes.json()
 
