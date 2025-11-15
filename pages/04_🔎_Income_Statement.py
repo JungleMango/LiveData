@@ -82,12 +82,8 @@ analysis_table = analysis_table[["date_x","price","EPS ($)","PE Ratio","Return E
 analysis_table = analysis_table.dropna()
 st.dataframe(analysis_table, hide_index=True)
 
-styled = (
-    analysis_table.style
-        .set_properties(**{'text-align': 'center'})
-        .set_table_styles([dict(selector='th', props=[('text-align', 'center')])])
-)
 
-st.dataframe(styled)
+analysis_table.style.set_properties(**{'text-align': 'center'}).set_table_styles([dict(selector='th', props=[('text-align', 'center')])])
+
 
 
