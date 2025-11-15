@@ -80,6 +80,7 @@ def price_card(live_price, ticker):
     # EXECUTING FUNCTIONS #
 #----------------------------#
 Live_price = fetch_live_quote(ticker)
+Live_price = Live_price["price"]
 
 Income_statement_table = pd.DataFrame(fetch_income(ticker))
 Quote_table = pd.DataFrame(fetch_quote(ticker))
