@@ -27,6 +27,30 @@ def fetch_quote(ticker):
     H_Quotes = requests.get(Hquotes_url)
     return H_Quotes.json()
 
+def section_title(title):
+    st.markdown(
+        f"""
+        <div style="
+            margin-top: 30px;
+            padding: 12px 16px;
+            background-color: #f5f7fa;
+            border-left: 4px solid #4a90e2;
+            border-radius: 4px;
+            font-size: 20px;
+            font-weight: 600;
+        ">
+            {title}
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
+def divider():
+    st.markdown(
+        "<hr style='border: 0; border-top: 1px solid #ddd; margin: 20px 0;'>",
+        unsafe_allow_html=True
+    )
+
+
 #----------------------------#
     # EXECUTING FUNCTIONS #
 #----------------------------#
@@ -60,8 +84,9 @@ analysis_table["TTM_Return"] = (
     # UI / STYLING #
 #----------------------------#
 
-st.markdown("Income statement")
+section_title("Income statement")
 st.dataframe(Income_statement_table, hide_index=True)
+divider()
 
 st.markdown("EPS per quarter")
 st.dataframe(EPS_table, hide_index=True)
