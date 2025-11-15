@@ -111,7 +111,7 @@ analysis_table = (
     .drop(columns=["symbol","date_y","Date","volume","TTM_Return"])
     [["Date_x","Price ($)","EPS ($)","PE Ratio","Return Expectation (%)","TTM Annualized (%)"]]
     .dropna()
-    .sort_values("Date", ascending=False)
+    .sort_values("Date_x", ascending=False)
 )
 
 # Center everything
