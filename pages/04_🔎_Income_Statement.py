@@ -41,6 +41,8 @@ Quote_table["Date"] = pd.to_datetime(Quote_table["date"])
 EPS_table = EPS_table.sort_values("Date")
 Quote_table = Quote_table.sort_values("Date")
 
+
+# Merging Tables
 analysis_table = pd.merge_asof(
     EPS_table,
     Quote_table,
@@ -49,7 +51,15 @@ analysis_table = pd.merge_asof(
 )
 analysis_table["PE Ratio"] = analysis_table["price"] / analysis_table["eps"]
 analysis_table["Return Expectation"] = analysis_table["eps"] / analysis_table["PE Ratio"]
-analysis_table["Return Expectation"] = (analysis_table["Return Expectation"] * 100).round(2).astype(str) + "%"
+
+# 1-year trailing return (compounded last 4 quarters)
+analysis_table["TTM_Return"] = (
+    (1 + analysis_table["Return Expectation"]).rolling(4).apply(lambda x: x.prod()) - 1
+)
+# Nicely formatted column
+analysis_table["TTM Annualized (%)"] = (
+    analysis_table["TTM_Return"] * 100
+).round(2).astype(str) + "%"
 
 
 
