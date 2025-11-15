@@ -58,7 +58,7 @@ def divider():
 
 Income_statement_table = pd.DataFrame(fetch_income(ticker))
 Quote_table = pd.DataFrame(fetch_quote(ticker))
-EPS_table = Income_statement_table[["date","eps"]]
+EPS_table = Income_statement_table[["date","eps","period"]]
 
 EPS_table["Date"] = pd.to_datetime(EPS_table["date"])
 Quote_table["Date"] = pd.to_datetime(Quote_table["date"])
@@ -109,7 +109,7 @@ analysis_table["Date_x"] = analysis_table["date_x"]
 analysis_table = (
     analysis_table
     .drop(columns=["symbol","date_y","Date","volume","TTM_Return"])
-    [["Date_x","Price ($)","EPS ($)","PE Ratio","Return Expectation (%)","TTM Annualized (%)"]]
+    [["Date_x","period","Price ($)","EPS ($)","PE Ratio","Return Expectation (%)","TTM Annualized (%)"]]
     .dropna()
     .sort_values("Date_x", ascending=False)
 )
