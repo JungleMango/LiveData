@@ -76,6 +76,6 @@ analysis_table["Return Expectation (%)"] = (analysis_table["Return Expectation"]
 analysis_table["EPS ($)"] = "$" + analysis_table["eps"].astype(str)
 
 analysis_table = analysis_table.drop(columns=["symbol","date_y","Date","volume","TTM_Return"])
-analysis_table = analysis_table[["date_x","price","EPS ($)","PE RATIO","Return Expectation (%)","TTM Annualized (%)"]]
+# analysis_table = analysis_table[["date_x","price","EPS ($)","PE RATIO","Return Expectation (%)","TTM Annualized (%)"]]
 st.dataframe(analysis_table, hide_index=True)
 
