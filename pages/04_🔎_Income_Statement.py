@@ -32,6 +32,7 @@ def fetch_quote(ticker):
 #----------------------------#
 
 Income_statement_table = pd.DataFrame(fetch_quote(ticker))
+Income_statement_table
 Quote_table = pd.DataFrame(fetch_quote(ticker))
 EPS_table = Income_statement_table[["Date","Eps"]]
 
