@@ -29,7 +29,9 @@ def fetch_quote(ticker):
 
 @st.cache_data(ttl=15)
 def fetch_live_quote(ticker):
-    Live_Quote = f'{base_url}/stable/quote?symbol={ticker}&apikey={api_key}'
+    Live_Quote_Url = f'{base_url}/stable/quote?symbol={ticker}&apikey={api_key}'
+    Live_Price = requests.get(Live_Quote_Url)
+    return Live_Price.json()
 
 def section_title(title):
     st.markdown(
@@ -79,8 +81,8 @@ def price_card(live_price, ticker):
 #----------------------------#
     # EXECUTING FUNCTIONS #
 #----------------------------#
-Live_price = fetch_live_quote(ticker)
-st.write(Live_price) 
+Live_Price = fetch_live_quote(ticker)
+Live_Price = Live_Price["price"]
 
 Income_statement_table = pd.DataFrame(fetch_income(ticker))
 Quote_table = pd.DataFrame(fetch_quote(ticker))
@@ -111,7 +113,7 @@ analysis_table["TTM_Return"] = (
     # UI / STYLING #
 #----------------------------#
 
-#price_card(price, ticker)
+price_card(Live_Price, ticker)
 
 section_title("Income statement")
 st.dataframe(Income_statement_table, hide_index=True)
