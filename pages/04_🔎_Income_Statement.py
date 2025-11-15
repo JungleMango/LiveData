@@ -6,7 +6,7 @@ api_key = 'beUiETWAQ7Ert13VnAd7qkiEqjT1GrFC'
 base_url = 'https://financialmodelingprep.com'
 data_type = 'income-statement'
 ticker = st.text_input("Enter Ticker")
-years = '120'
+years = ''
 time = 'quarter'
 
 #----------------------------#
@@ -17,13 +17,13 @@ time = 'quarter'
 # Function will return the data from specified website.
 @st.cache_data(ttl=86400)
 def fetch_income(ticker):
-    Inc_Stat_Url = f'{base_url}/stable/{data_type}?symbol={ticker}&limit={years}&apikey={api_key}' # variable to created url
+    Inc_Stat_Url = f'{base_url}/stable/{data_type}?symbol={ticker}&limit={years}&period={time}apikey={api_key}' # variable to created url
     Income = requests.get(Inc_Stat_Url) # assigning variable to data requested from website
     return Income.json() # saving result as json
 # {base_url}/stable/{data_type}?symbol={ticker}&limit={years}&period={time}&apikey={api_key}
 @st.cache_data(ttl=100)
 def fetch_quote(ticker):
-    Hquotes_url = f'https://financialmodelingprep.com/stable/income-statement?symbol={ticker}&limit=120&period=quarter&apikey=beUiETWAQ7Ert13VnAd7qkiEqjT1GrFC'
+    Hquotes_url = f'{base_url}/stable/historical-price-eod/light?symbol={ticker}&from=2000-11-15&to=2025-11-15&apikey={api_key}'
     H_Quotes = requests.get(Hquotes_url)
     return H_Quotes.json()
 
