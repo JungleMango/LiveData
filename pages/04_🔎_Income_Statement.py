@@ -6,7 +6,7 @@ api_key = 'beUiETWAQ7Ert13VnAd7qkiEqjT1GrFC'
 base_url = 'https://financialmodelingprep.com'
 data_type = 'income-statement'
 ticker = st.text_input("Enter Ticker")
-years = '30'
+years = '120'
 time = 'quarter'
 
 #----------------------------#
@@ -23,7 +23,7 @@ def fetch_income(ticker):
 # {base_url}/stable/{data_type}?symbol={ticker}&limit={years}&period={time}&apikey={api_key}
 @st.cache_data(ttl=100)
 def fetch_quote(ticker):
-    Hquotes_url = f'{base_url}/stable/historical-price-eod/light?symbol={ticker}&from=2017-11-13&to=2025-11-13&apikey={api_key}'
+    Hquotes_url = f'{base_url}/stable/historical-price-eod/light?symbol={ticker}&limit={years}&period={time}from=2017-11-13&to=2025-11-13&apikey={api_key}'
     H_Quotes = requests.get(Hquotes_url)
     return H_Quotes.json()
 
@@ -49,9 +49,6 @@ analysis_table["PE Ratio"] = analysis_table["price"] / analysis_table["eps"]
 analysis_table["Return Expectation"] = analysis_table["eps"] / analysis_table["PE Ratio"]
 
 
-
-
-
 #----------------------------#
     # UI / STYLING #
 #----------------------------#
@@ -66,7 +63,7 @@ st.dataframe(EPS_table, hide_index=True)
 st.markdown("Histoical prices")
 st.dataframe(Quote_table, hide_index=True)
 
-st.subheader("Price matched to EPS dates")
+st.subheader(" Analysis table: Yearly P/E")
 analysis_table = analysis_table.drop(columns=["symbol"])
 st.dataframe(analysis_table, hide_index=True)
 
