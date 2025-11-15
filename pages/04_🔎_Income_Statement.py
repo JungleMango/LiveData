@@ -106,7 +106,7 @@ analysis_table["Price ($)"] = "$" + analysis_table["price"].astype(str)
 #analysis_table["PE Ratio ($)"] = "$" + analysis_table["PE Ratio"].astype(str)
 
 analysis_table = analysis_table.drop(columns=["symbol","date_y","Date","volume","TTM_Return"])
-analysis_table = analysis_table[["date_x","price","EPS ($)","PE Ratio","Return Expectation (%)","TTM Annualized (%)"]]
+analysis_table = analysis_table[["date_x","Price ($)","EPS ($)","PE Ratio","Return Expectation (%)","TTM Annualized (%)"]]
 analysis_table = analysis_table.dropna()
 
 # Center everything
