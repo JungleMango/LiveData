@@ -33,22 +33,22 @@ def fetch_quote(ticker):
 
 Income_statement_table = pd.DataFrame(fetch_quote(ticker))
 Quote_table = pd.DataFrame(fetch_quote(ticker))
-EPS_table = Income_statement_table[["date","eps"]]
+EPS_table = Income_statement_table[["Date","Eps"]]
 
-EPS_table["date"] = pd.to_datetime(EPS_table["date"])
-Quote_table["date"] = pd.to_datetime(Quote_table["date"])
-EPS_table = EPS_table.sort_values("date")
-Quote_table = Quote_table.sort_values("date")
+EPS_table["Date"] = pd.to_datetime(EPS_table["Date"])
+Quote_table["Date"] = pd.to_datetime(Quote_table["Date"])
+EPS_table = EPS_table.sort_values("Date")
+Quote_table = Quote_table.sort_values("Date")
 
 analysis_table = pd.merge_asof(
     EPS_table,
     Quote_table,
-    on="date"
+    on="Date"
       # match last price <= EPS date
 )
-analysis_table["PE Ratio"] = analysis_table["price"] / analysis_table["eps"]
-analysis_table["Return Expectation"] = analysis_table["eps"] / analysis_table["PE Ratio"]
-# analysis_table["Return expectation"] = (analysis_table["Return expectation"] * 100).round(2).astype(str) + "%"
+analysis_table["PE Ratio"] = analysis_table["Price"] / analysis_table["Eps"]
+analysis_table["Return Expectation"] = analysis_table["Eps"] / analysis_table["PE Ratio"]
+analysis_table["Return expectation"] = (analysis_table["Return expectation"] * 100).round(2).astype(str) + "%"
 
 
 
