@@ -115,7 +115,7 @@ analysis_table["TTM_Return"] = (
     # UI / STYLING #
 #----------------------------#
 
-price_card(Live_Price, ticker)
+price_card(Price, ticker)
 
 section_title("Income statement")
 st.dataframe(Income_statement_table, hide_index=True)
