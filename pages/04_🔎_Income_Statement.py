@@ -83,7 +83,7 @@ def price_card(live_price, ticker):
 #----------------------------#
 Live_Price = fetch_live_quote(ticker)
 st.write(Live_Price)
-Price = Live_Price.data[0].get["price"]
+Price = Live_Price[0]["price"]
 st.write(Price)
 
 Income_statement_table = pd.DataFrame(fetch_income(ticker))
