@@ -1,6 +1,7 @@
 import streamlit as st
 import requests
 import pandas as pd 
+from streamlit_autorefresh import st_autorefresh
 
 api_key = 'beUiETWAQ7Ert13VnAd7qkiEqjT1GrFC'
 base_url = 'https://financialmodelingprep.com'
@@ -82,9 +83,8 @@ def price_card(live_price, ticker):
     # EXECUTING FUNCTIONS #
 #----------------------------#
 Live_Price = fetch_live_quote(ticker)
-st.write(Live_Price)
+st_autorefresh(interval=10000, key="refresh_live_price")
 Price = Live_Price[0]["price"]
-st.write(Price)
 
 Income_statement_table = pd.DataFrame(fetch_income(ticker))
 Quote_table = pd.DataFrame(fetch_quote(ticker))
