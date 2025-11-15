@@ -27,6 +27,10 @@ def fetch_quote(ticker):
     H_Quotes = requests.get(Hquotes_url)
     return H_Quotes.json()
 
+@st.cache_data(ttl=15)
+def fetch_live_quote(ticker):
+    Live_Quote = f'{base_url}/stable/quote?symbol={ticker}&apikey={api_key}'
+
 def section_title(title):
     st.markdown(
         f"""
@@ -50,11 +54,32 @@ def divider():
         "<hr style='border: 0; border-top: 1px solid #ddd; margin: 20px 0;'>",
         unsafe_allow_html=True
     )
+def price_card(live_price, ticker):
+    st.markdown(
+        f"""
+        <div style="
+            background: linear-gradient(135deg, #0f5132, #198754);
+            padding: 18px;
+            border-radius: 12px;
+            text-align: center;
+            color: white;
+            font-size: 36px;
+            font-weight: 700;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.25);
+            letter-spacing: 1px;
+        ">
+            {ticker} — ${live_price:,.2f}
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
+
 
 
 #----------------------------#
     # EXECUTING FUNCTIONS #
 #----------------------------#
+Live_price = fetch_live_quote(ticker)
 
 Income_statement_table = pd.DataFrame(fetch_income(ticker))
 Quote_table = pd.DataFrame(fetch_quote(ticker))
@@ -84,6 +109,8 @@ analysis_table["TTM_Return"] = (
 #----------------------------#
     # UI / STYLING #
 #----------------------------#
+
+price_card(Live_price, ticker)
 
 section_title("Income statement")
 st.dataframe(Income_statement_table, hide_index=True)
