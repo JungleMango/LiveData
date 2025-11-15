@@ -32,14 +32,28 @@ def section_title(title):
         f"""
         <div style="
             margin-top: 30px;
-            padding: 12px 16px;
-            background-color: #2a915e;
-            border-left: 4px solid #4a90e2;
-            border-radius: 4px;
-            font-size: 20px;
+            padding: 16px;
+            background: linear-gradient(135deg, #1e3c32, #2a915e);
+            border-radius: 10px;
             text-align: center;
-            font-weight: 600;
+            color: #ffffff;
+            font-size: 22px;
+            font-weight: 700;
+            letter-spacing: 0.5px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+            position: relative;
         ">
+            <div style="
+                position: absolute;
+                top: 0;
+                left: 50%;
+                transform: translateX(-50%);
+                width: 60px;
+                height: 4px;
+                background-color: #00ff95;
+                border-radius: 2px 2px 0 0;
+            "></div>
+            
             {title}
         </div>
         """,
