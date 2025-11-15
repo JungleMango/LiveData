@@ -74,8 +74,8 @@ st.markdown(" P/E is the amount investors want to pay to get a return of eps (Ex
 analysis_table["TTM Annualized (%)"] = (analysis_table["TTM_Return"] * 100).round(2).astype(str) + "%"
 analysis_table["Return Expectation (%)"] = (analysis_table["Return Expectation"] * 100).round(2).astype(str)+ "%"
 analysis_table["EPS ($)"] = "$" + analysis_table["eps"].astype(str)
-analysis_table["Price ($)"] = "$" + analysis_table["price"].astype(str)
-analysis_table["PE Ratio ($)"] = "$" + analysis_table["PE Ratio"].astype(str)
+#analysis_table["Price ($)"] = "$" + analysis_table["price"].astype(str)
+#analysis_table["PE Ratio ($)"] = "$" + analysis_table["PE Ratio"].astype(str)
 
 analysis_table = analysis_table.drop(columns=["symbol","date_y","Date","volume","TTM_Return"])
 analysis_table = analysis_table[["date_x","Price ($)","EPS ($)","PE Ratio ($)","Return Expectation (%)","TTM Annualized (%)"]]
