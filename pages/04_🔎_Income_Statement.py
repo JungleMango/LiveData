@@ -48,7 +48,7 @@ analysis_table = pd.merge_asof(
 )
 analysis_table["PE Ratio"] = analysis_table["price"] / analysis_table["eps"]
 analysis_table["Return Expectation"] = analysis_table["eps"] / analysis_table["PE Ratio"]
-analysis_table["Return expectation"] = (analysis_table["Return expectation"] * 100).round(2).astype(str) + "%"
+# analysis_table["Return expectation"] = (analysis_table["Return expectation"] * 100).round(2).astype(str) + "%"
 
 
 
