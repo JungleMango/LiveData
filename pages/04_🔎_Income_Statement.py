@@ -82,7 +82,7 @@ def price_card(live_price, ticker):
     # EXECUTING FUNCTIONS #
 #----------------------------#
 Live_Price = fetch_live_quote(ticker)
-Live_Price = Live_Price["price"]
+st.write(Live_Price)
 
 Income_statement_table = pd.DataFrame(fetch_income(ticker))
 Quote_table = pd.DataFrame(fetch_quote(ticker))
@@ -113,7 +113,7 @@ analysis_table["TTM_Return"] = (
     # UI / STYLING #
 #----------------------------#
 
-price_card(Live_Price, ticker)
+#price_card(Live_Price, ticker)
 
 section_title("Income statement")
 st.dataframe(Income_statement_table, hide_index=True)
