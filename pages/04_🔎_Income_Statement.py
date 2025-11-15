@@ -32,28 +32,14 @@ def section_title(title):
         f"""
         <div style="
             margin-top: 30px;
-            padding: 16px;
-            background: linear-gradient(135deg, #1e3c32, #2a915e);
-            border-radius: 10px;
+            padding: 12px 16px;
+            background-color: #2a915e;
+            border-left: 4px solid #1b2129;
+            border-radius: 4px;
+            font-size: 20px;
             text-align: center;
-            color: #ffffff;
-            font-size: 22px;
-            font-weight: 700;
-            letter-spacing: 0.5px;
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
-            position: relative;
+            font-weight: 600;
         ">
-            <div style="
-                position: absolute;
-                top: 0;
-                left: 50%;
-                transform: translateX(-50%);
-                width: 60px;
-                height: 4px;
-                background-color: #00ff95;
-                border-radius: 2px 2px 0 0;
-            "></div>
-            
             {title}
         </div>
         """,
@@ -103,13 +89,15 @@ section_title("Income statement")
 st.dataframe(Income_statement_table, hide_index=True)
 divider()
 
-st.markdown("EPS per quarter")
+section_title("EPS per quarter")
 st.dataframe(EPS_table, hide_index=True)
+divider()
 
-st.markdown("Histoical prices")
+section_title("Histoical prices")
 st.dataframe(Quote_table, hide_index=True)
+divider()
 
-st.markdown(" Analysis table: Quarterly EPS and Return Expectations")
+section_title(" Analysis table: Quarterly EPS and Return Expectations")
 st.markdown(" P/E is the amount investors want to pay to get a return of eps (Expeted Return)")
 analysis_table["TTM Annualized (%)"] = (analysis_table["TTM_Return"] * 100).round(2).astype(str) + "%"
 analysis_table["Return Expectation (%)"] = (analysis_table["Return Expectation"] * 100).round(2).astype(str)+ "%"
