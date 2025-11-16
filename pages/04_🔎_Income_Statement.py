@@ -66,7 +66,7 @@ def price_card(live_price, ticker):
             border-radius: 12px;
             text-align: center;
             color: white;
-            font-size: 36px;
+            font-size: 14px;
             font-weight: 700;
             box-shadow: 0 4px 12px rgba(0,0,0,0.25);
             letter-spacing: 1px;
@@ -115,7 +115,9 @@ analysis_table["TTM_Return"] = (
     # UI / STYLING #
 #----------------------------#
 
-price_card(Price, ticker)
+st.subheader("Live Price")
+with st.container():
+    price_card(Price, ticker)
 
 section_title("Income statement")
 st.dataframe(Income_statement_table, hide_index=True)
