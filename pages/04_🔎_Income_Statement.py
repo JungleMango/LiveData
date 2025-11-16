@@ -57,7 +57,24 @@ def divider():
         "<hr style='border: 0; border-top: 1px solid #ddd; margin: 20px 0;'>",
         unsafe_allow_html=True
     )
-
+def price_card(live_price, ticker):
+    st.markdown(
+        f"""
+        <span style="
+            padding: 18px;
+            border-radius: 12px;
+            text-align: center;
+            color: white;
+            font-size: 14px;
+            font-weight: 700;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.25);
+            letter-spacing: 1px;
+        ">
+            {ticker} — ${live_price:,.2f}
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
 
 
 
@@ -97,7 +114,8 @@ analysis_table["TTM_Return"] = (
     # UI / STYLING #
 #----------------------------#
 
-st.subheader(f"Live Price — ${Live_Price:,.2f}")
+st.subheader(f"Live Price — ${Price:,.2f}  🔼")
+
 
 section_title("Income statement")
 st.dataframe(Income_statement_table, hide_index=True)
