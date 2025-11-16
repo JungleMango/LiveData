@@ -61,7 +61,6 @@ def price_card(live_price, ticker):
     st.markdown(
         f"""
         <span style="
-            background: linear-gradient(135deg, #0f5132, #198754);
             padding: 18px;
             border-radius: 12px;
             text-align: center;
