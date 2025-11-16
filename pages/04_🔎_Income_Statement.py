@@ -2,6 +2,7 @@ import streamlit as st
 import requests
 import pandas as pd 
 import matplotlib.pyplot as plt
+import matplotlib.ticker as mtick
 from streamlit_autorefresh import st_autorefresh
 
 api_key = 'beUiETWAQ7Ert13VnAd7qkiEqjT1GrFC'
@@ -117,19 +118,21 @@ analysis_table["TTM_Return"] = (
 #----------------------------#
 
 plt.style.use("seaborn-v0_8-whitegrid")
-metrics = ["revenue", "grossProfit", "operatingExpenses", "ebitda", "bottomLineNetIncome"]
-metrics = [m for m in metrics if m in Income_statement_table.columns]
 
-fig, axes = plt.subplots(len(metrics), 1, figsize=(10, 4 * len(metrics)), sharex=False)
+fig, ax = plt.subplots(figsize=(10, 5))
 
-for ax, metric in zip(axes, metrics):
-    ax.hist(Income_statement_table[metric], bins=10, color="#1f77b4", alpha=0.8)
-    ax.set_title(f"{metric} Distribution", fontsize=16, weight="bold")
-    ax.set_ylabel("Count")
-    
-    ax.spines["top"].set_visible(False)
-    ax.spines["right"].set_visible(False)
-    ax.grid(alpha=0.25)
+ax.hist(Income_statement_table["revenue"], bins=10, color="#1f77b4", alpha=0.8)
+
+ax.set_title("Revenue Distribution", fontsize=18, weight="bold", pad=12)
+ax.set_xlabel("Revenue (USD)", fontsize=12)
+ax.set_ylabel("Dollar Amount (USD)", fontsize=12)
+
+# 👉 Format Y-axis as dollars
+ax.yaxis.set_major_formatter(mtick.StrMethodFormatter('${x:,.0f}'))
+
+# clean look
+ax.spines["top"].set_visible(False)
+ax.spines["right"].set_visible(False)
 
 st.pyplot(fig)
 #----------------------------#
