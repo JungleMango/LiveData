@@ -137,9 +137,9 @@ Selected_income_metrics = Income_statement_table[[
     "bottomLineNetIncome"
     ]]
 
-Selected_income_metrics["Year"]= Selected_income_metrics["fiscalYear"].astype(str) + "" + Selected_income_metrics["period"].astype(str)
+Selected_income_metrics["Year"]= Income_statement_table["fiscalYear"].astype(str) + "" + Income_statement_table["period"].astype(str)
 
-Income_charting = Income_statement_table[[
+Income_charting = Selected_income_metrics[[
     "Year",
     "revenue",
     "costOfRevenue",
