@@ -122,32 +122,37 @@ plt.style.use("seaborn-v0_8-whitegrid")
 # Convert date column (important!)
 Income_statement_table["date"] = pd.to_datetime(Income_statement_table["date"])
 
-plt.figure(figsize=(20,10))
+fig, ax1 = plt.subplots(figsize=(20,10))
 
-plt.plot(
+# Revenue on left axis
+ax1.plot(
     Income_statement_table["date"],
     Income_statement_table["revenue"],
     linewidth=2,
-    color="#33b41f"
+    color="#33b41f",
+    label="Revenue"
 )
+ax1.set_ylabel("Revenue (USD)", color="#33b41f")
+ax1.tick_params(axis='y', labelcolor="#33b41f")
 
-plt.plot(
+# Cost of Revenue on right axis
+ax2 = ax1.twinx()
+ax2.plot(
     Income_statement_table["date"],
     Income_statement_table["costOfRevenue"],
     linewidth=2,
-    color="#cd2525"
+    color="#cd2525",
+    label="Cost of Revenue"
 )
+ax2.set_ylabel("Cost of Revenue (USD)", color="#cd2525")
+ax2.tick_params(axis='y', labelcolor="#cd2525")
 
-
-plt.title("Revenue Over Time", fontsize=16, weight="bold")
-plt.xlabel("Date")
-plt.ylabel("Revenue (USD)","costOfRevenue")
+ax1.set_title("Revenue vs Cost of Revenue Over Time", fontsize=16, weight="bold")
+ax1.set_xlabel("Date")
 plt.xticks(rotation=45)
 
-plt.grid(alpha=0.3)
-
-plt.tight_layout()
-st.pyplot(plt)
+fig.tight_layout()
+st.pyplot(fig)
 #----------------------------#
     # UI / STYLING #
 #----------------------------#
