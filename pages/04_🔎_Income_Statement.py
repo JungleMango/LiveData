@@ -137,8 +137,6 @@ Selected_income_metrics = Income_statement_table[[
     "bottomLineNetIncome"
     ]]
 
-Selected_income_metrics["Year"]= Selected_income_metrics["fiscalYear"].astype(str) + "" + Selected_income_metrics["period"].astype(str)
-available = [m for m in Selected_income_metrics if m in Income_statement_table.columns]
 
 hist_df = Income_statement_table[["Year"] + available]
 
