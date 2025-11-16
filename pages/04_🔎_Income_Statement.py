@@ -1,7 +1,7 @@
 import streamlit as st
 import requests
 import pandas as pd 
-import altair as alt
+import matplotlib.pyplot as plt
 from streamlit_autorefresh import st_autorefresh
 
 api_key = 'beUiETWAQ7Ert13VnAd7qkiEqjT1GrFC'
@@ -116,7 +116,39 @@ analysis_table["TTM_Return"] = (
     # CHARTING #
 #----------------------------#
 
+plt.style.use("seaborn-v0_8-whitegrid")   # clean, modern, minimal
 
+fig, ax = plt.subplots(figsize=(11, 5))
+
+# Plot selected metrics
+ax.plot(Income_statement_table["fiscalYear"], Income_statement_table["revenue"], 
+        label="Revenue", linewidth=2.2, color="#1f77b4")
+
+ax.plot(Income_statement_table["fiscalYear"], Income_statement_table["grossProfit"], 
+        label="Gross Profit", linewidth=2.2, color="#2ca02c")
+
+ax.plot(Income_statement_table["fiscalYear"], Income_statement_table["ebitda"], 
+        label="EBITDA", linewidth=2.2, color="#ff7f0e")
+
+# Clean formatting
+ax.set_title("Income Statement Trends", fontsize=18, weight="bold", pad=15)
+ax.set_xlabel("fiscalYear", fontsize=12)
+ax.set_ylabel("Amount (USD)", fontsize=12)
+
+ax.tick_params(axis="x", rotation=45)
+ax.tick_params(axis="both", labelsize=11)
+
+# Clean grid
+ax.grid(alpha=0.25)
+
+# Remove top & right borders
+ax.spines["top"].set_visible(False)
+ax.spines["right"].set_visible(False)
+
+# Legend
+ax.legend(frameon=False, fontsize=11)
+
+st.pyplot(fig)
 
 #----------------------------#
     # UI / STYLING #
