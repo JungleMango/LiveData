@@ -120,20 +120,20 @@ Selected_income_metrics = Income_statement_table[
     "fiscalYear",
     "period", 
     "revenue",
-    "costOfRevenue"
-    "grossProfit"
-    "researchAndDevelopmentExpenses"
-    "generalAndAdministrativeExpenses"
-    "sellingAndMarketingExpenses"
-    "sellingGeneralAndAdministrativeExpenses"
-    "otherExpenses"
-    "operatingExpenses"
-    "costAndExpenses"
-    "netInterestIncome"
-    "interestIncome"
-    "interestExpense"
-    "depreciationAndAmortization"
-    "ebitda"
+    "costOfRevenue",
+    "grossProfit",
+    "researchAndDevelopmentExpenses",
+    "generalAndAdministrativeExpenses",
+    "sellingAndMarketingExpenses",
+    "sellingGeneralAndAdministrativeExpenses",
+    "otherExpenses",
+    "operatingExpenses",
+    "costAndExpenses",
+    "netInterestIncome",
+    "interestIncome",
+    "interestExpense",
+    "depreciationAndAmortization",
+    "ebitda",
     "bottomLineNetIncome"
     ]
 
