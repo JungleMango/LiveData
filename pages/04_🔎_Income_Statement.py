@@ -58,24 +58,24 @@ def divider():
         unsafe_allow_html=True
     )
 def price_card(live_price, ticker):
-    st.markdown(
-        f"""
-        <div style="
-            background: linear-gradient(135deg, #0f5132, #198754);
-            padding: 18px;
-            border-radius: 12px;
-            text-align: center;
-            color: white;
-            font-size: 36px;
-            font-weight: 700;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.25);
-            letter-spacing: 1px;
-        ">
-            {ticker} — ${live_price:,.2f}
+ st.markdown(
+    f"""
+    <div style="
+        font-family: 'Inter', sans-serif;
+        text-align: left;
+        padding: 4px 0;
+    ">
+        <div style="font-size:14px; color:#6b7280; letter-spacing:1px;">
+            {ticker.upper()}
         </div>
-        """,
-        unsafe_allow_html=True
-    )
+
+        <div style="font-size:28px; font-weight:600;">
+            ${live_price:,.2f}
+        </div>
+    </div>
+    """,
+    unsafe_allow_html=True
+)
 
 
 
