@@ -57,31 +57,24 @@ def divider():
         "<hr style='border: 0; border-top: 1px solid #ddd; margin: 20px 0;'>",
         unsafe_allow_html=True
     )
-def price_card_minimal(live_price, ticker: str):
-    """Minimal, clean price display: no big box, just text."""
-    try:
-        live_price = float(live_price)
-    except (TypeError, ValueError):
-        st.error(f"Live price is not numeric. Got: {live_price}")
-        return
-
+def price_card(live_price, ticker):
     st.markdown(
         f"""
         <div style="
-            font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
-            text-align: left;
-            padding: 4px 0;
+            background: linear-gradient(135deg, #0f5132, #198754);
+            padding: 18px;
+            border-radius: 12px;
+            text-align: center;
+            color: white;
+            font-size: 36px;
+            font-weight: 700;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.25);
+            letter-spacing: 1px;
         ">
-            <div style="font-size:13px; color:#6b7280; letter-spacing:1px;">
-                {ticker.upper()}
-            </div>
-
-            <div style="font-size:28px; font-weight:600;">
-                ${live_price:,.2f}
-            </div>
+            {ticker} — ${live_price:,.2f}
         </div>
         """,
-        unsafe_allow_html=True,
+        unsafe_allow_html=True
     )
 
 
