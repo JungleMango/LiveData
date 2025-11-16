@@ -63,7 +63,7 @@ def price_card(live_price, ticker):
         <span style="
             padding: 18px;
             border-radius: 12px;
-            text-align: center;
+            text-align: left;
             color: white;
             font-size: 14px;
             font-weight: 700;
