@@ -115,10 +115,9 @@ analysis_table["TTM_Return"] = (
     # UI / STYLING #
 #----------------------------#
 
-
-with st.container():
-    st.subheader("Live Price")
-    price_card(Price, ticker)
+col1, col2 = st.columns([1,3])
+with col1: st.subheader("Live Price")
+with col2: price_card(Price, ticker)
 
 section_title("Income statement")
 st.dataframe(Income_statement_table, hide_index=True)
