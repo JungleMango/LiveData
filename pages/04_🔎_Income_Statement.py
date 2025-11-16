@@ -119,8 +119,27 @@ analysis_table["TTM_Return"] = (
 
 plt.style.use("seaborn-v0_8-whitegrid")
 
-plt.plot(Income_statement_table["revenue"],Income_statement_table["date"])
-plt.show()
+# Convert date column (important!)
+Income_statement_table["date"] = pd.to_datetime(Income_statement_table["date"])
+
+plt.figure(figsize=(10,5))
+
+plt.plot(
+    Income_statement_table["date"],
+    Income_statement_table["revenue"],
+    linewidth=2,
+    color="#1f77b4"
+)
+
+plt.title("Revenue Over Time", fontsize=16, weight="bold")
+plt.xlabel("Date")
+plt.ylabel("Revenue (USD)")
+plt.xticks(rotation=45)
+
+plt.grid(alpha=0.3)
+
+plt.tight_layout()
+st.pyplot(plt)
 #----------------------------#
     # UI / STYLING #
 #----------------------------#
