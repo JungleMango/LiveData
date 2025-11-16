@@ -116,7 +116,7 @@ analysis_table["TTM_Return"] = (
     # CHARTING #
 #----------------------------#
 
-Selected_income_metrics = Income_statement_table[[
+Selected_income_metrics = Income_statement_table[
     "fiscalYear",
     "period", 
     "revenue",
@@ -135,7 +135,7 @@ Selected_income_metrics = Income_statement_table[[
     "depreciationAndAmortization"
     "ebitda"
     "bottomLineNetIncome"
-    ]]
+    ]
 
 available = [m for m in Selected_income_metrics if m in Income_statement_table.columns]
 
