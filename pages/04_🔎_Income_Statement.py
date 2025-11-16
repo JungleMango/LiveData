@@ -115,8 +115,9 @@ analysis_table["TTM_Return"] = (
     # UI / STYLING #
 #----------------------------#
 
-st.subheader("Live Price")
+
 with st.container():
+    st.subheader("Live Price")
     price_card(Price, ticker)
 
 section_title("Income statement")
