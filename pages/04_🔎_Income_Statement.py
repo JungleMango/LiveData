@@ -122,18 +122,26 @@ plt.style.use("seaborn-v0_8-whitegrid")
 # Convert date column (important!)
 Income_statement_table["date"] = pd.to_datetime(Income_statement_table["date"])
 
-plt.figure(figsize=(10,5))
+plt.figure(figsize=(20,10))
 
 plt.plot(
     Income_statement_table["date"],
     Income_statement_table["revenue"],
     linewidth=2,
-    color="#1f77b4"
+    color="#33b41f"
 )
+
+plt.plot(
+    Income_statement_table["date"],
+    Income_statement_table["costOfRevenue"],
+    linewidth=2,
+    color="#cd2525"
+)
+
 
 plt.title("Revenue Over Time", fontsize=16, weight="bold")
 plt.xlabel("Date")
-plt.ylabel("Revenue (USD)")
+plt.ylabel("Revenue (USD)","costOfRevenue")
 plt.xticks(rotation=45)
 
 plt.grid(alpha=0.3)
