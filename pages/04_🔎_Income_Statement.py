@@ -1,6 +1,7 @@
 import streamlit as st
 import requests
 import pandas as pd 
+import altair as alt
 from streamlit_autorefresh import st_autorefresh
 
 api_key = 'beUiETWAQ7Ert13VnAd7qkiEqjT1GrFC'
@@ -109,6 +110,65 @@ analysis_table["Return Expectation"] = analysis_table["eps"] / analysis_table["P
 analysis_table["TTM_Return"] = (
     (1 + analysis_table["Return Expectation"]).rolling(4).apply(lambda x: x.prod()) - 1
 )
+
+
+#----------------------------#
+    # CHARTING #
+#----------------------------#
+
+Selected_income_metrics = Income_statement_table[[
+    "fiscalYear",
+    "period", 
+    "revenue",
+    "costOfRevenue"
+    "grossProfit"
+    "researchAndDevelopmentExpenses"
+    "generalAndAdministrativeExpenses"
+    "sellingAndMarketingExpenses"
+    "sellingGeneralAndAdministrativeExpenses"
+    "otherExpenses"
+    "operatingExpenses"
+    "costAndExpenses"
+    "netInterestIncome"
+    "interestIncome"
+    "interestExpense"
+    "depreciationAndAmortization"
+    "ebitda"
+    "bottomLineNetIncome"
+    ]]
+
+available = [m for m in Selected_income_metrics if m in Income_statement_table.columns]
+
+hist_df = Income_statement_table[["Year"] + available]
+
+hist_melt = hist_df.melt(
+    id_vars="Year",
+    value_vars=available,
+    var_name="Metric",
+    value_name="Value"
+)
+
+st.markdown("### 📊 Income Statement Histogram by Year")
+
+hist_chart = (
+    alt.Chart(hist_melt)
+    .mark_bar()
+    .encode(
+        x=alt.X("Year:O", title="Fiscal Year"),
+        y=alt.Y("Value:Q", title="Amount (USD)", axis=alt.Axis(format="~s")),
+        color=alt.Color("Metric:N"),
+        tooltip=[
+            alt.Tooltip("Year:O", title="Year"),
+            alt.Tooltip("Metric:N", title="Metric"),
+            alt.Tooltip("Value:Q", title="Value", format=",.0f"),
+        ]
+    )
+    .properties(height=350)
+)
+
+st.altair_chart(hist_chart, use_container_width=True)
+
+
 
 #----------------------------#
     # UI / STYLING #
