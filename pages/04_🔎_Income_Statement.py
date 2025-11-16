@@ -114,7 +114,7 @@ analysis_table["TTM_Return"] = (
     # UI / STYLING #
 #----------------------------#
 
-st.subheader(f"Live Price — ${Price:,.2f}  🔼")
+st.write(f"## Live Price — ${Price:,.2f}  🔼")
 
 
 section_title("Income statement")
