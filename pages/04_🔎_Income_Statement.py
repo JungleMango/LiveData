@@ -119,7 +119,7 @@ analysis_table["TTM_Return"] = (
 
 plt.style.use("seaborn-v0_8-whitegrid")
 
-plt.plot(Income_statement_table["revenue"]["date"])
+plt.plot(Income_statement_table["revenue"],Income_statement_table["date"])
 plt.show()
 #----------------------------#
     # UI / STYLING #
