@@ -119,22 +119,8 @@ analysis_table["TTM_Return"] = (
 
 plt.style.use("seaborn-v0_8-whitegrid")
 
-fig, ax = plt.subplots(figsize=(10, 5))
-
-ax.hist(Income_statement_table["revenue"], bins=10, color="#1f77b4", alpha=0.8)
-
-ax.set_title("Revenue Distribution", fontsize=18, weight="bold", pad=12)
-ax.set_xlabel("Revenue (USD)", fontsize=12)
-ax.set_ylabel("Dollar Amount (USD)", fontsize=12)
-
-# 👉 Format Y-axis as dollars
-ax.yaxis.set_major_formatter(mtick.StrMethodFormatter('${x:,.0f}'))
-
-# clean look
-ax.spines["top"].set_visible(False)
-ax.spines["right"].set_visible(False)
-
-st.pyplot(fig)
+plt.plot(Income_statement_table["revenue"]["date"])
+plt.show()
 #----------------------------#
     # UI / STYLING #
 #----------------------------#
