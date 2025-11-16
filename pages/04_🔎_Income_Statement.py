@@ -139,6 +139,38 @@ Selected_income_metrics = Income_statement_table[[
 
 Selected_income_metrics["Year"]= Selected_income_metrics["fiscalYear"].astype(str) + "" + Selected_income_metrics["period"].astype(str)
 
+Income_charting = Income_statement_table[[
+    "Year",
+    "revenue",
+    "costOfRevenue",
+    "grossProfit",
+    "researchAndDevelopmentExpenses",
+    "generalAndAdministrativeExpenses",
+    "sellingAndMarketingExpenses",
+    "sellingGeneralAndAdministrativeExpenses",
+    "otherExpenses",
+    "operatingExpenses",
+    "costAndExpenses",
+    "netInterestIncome",
+    "interestIncome",
+    "interestExpense",
+    "depreciationAndAmortization",
+    "ebitda",
+    "bottomLineNetIncome"
+    ]]
+
+
+
+available = [m for m in Income_charting if m in Income_charting.columns]
+
+hist_df = Income_charting[["Year"] + available]
+
+hist_melt = hist_df.melt(
+    id_vars="Year",
+    value_vars=available,
+    var_name="Metric",
+    value_name="Value"
+)
 
 st.markdown("### 📊 Income Statement Histogram by Year")
 
