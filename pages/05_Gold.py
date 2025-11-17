@@ -2,6 +2,10 @@ import streamlit as st
 import requests
 import pandas as pd 
 from datetime import datetime
+import numpy as np
+from scipy.stats import skew, kurtosis
+import matplotlib.pyplot as plt
+
 
 #----------------------------#
     # DECLARING FUNCTIONS #
@@ -35,11 +39,27 @@ P_Change_percent = f"{P_Change :.2f}%"
 
 timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
+
 #----------------------------#
     # TABLES #
 #----------------------------#
 
-Gold_History = pd.DataFrame(fetch_histo_quotes())
+Gold_History_Table = pd.DataFrame(fetch_histo_quotes())
+
+Gold_History_Table["date"] = pd.to_datetime(Gold_History_Table["date"])
+Gold_History_Table = Gold_History_Table.sort_values("date").set_index("date")
+
+# Rename close → price for convenience
+Gold_History_Table = Gold_History_Table.rename(columns={"close": "price"})
+
+# Ensure numeric
+numeric_cols = ["open", "high", "low", "price", "volume", "change", "changePercent", "vwap"]
+for col in numeric_cols:
+        if col in Gold_History_Table.columns:
+            Gold_History_Table[col] = pd.to_numeric(Gold_History_Table[col], errors="coerce")
+
+Gold_History_Table = Gold_History_Table.dropna(subset=["price"])
+Gold_History_Table = Gold_History_Table[~Gold_History_Table.index.duplicated(keep="last")]
 
 
 #----------------------------#
@@ -91,4 +111,4 @@ st.markdown(
 
 divider()
 
-st.write(Gold_History)
+st.dataframe(Gold_History_Table, hide_index=True)
