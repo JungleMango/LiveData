@@ -61,6 +61,36 @@ Gold_History_Table = Gold_History_Table.dropna(subset=["price"])
 Gold_History_Table = Gold_History_Table[~Gold_History_Table.index.duplicated(keep="last")]
 
 
+trading_days = 252
+
+# Returns: from price
+Gold_History_Table["ret"] = Gold_History_Table["price"].pct_change()
+
+# API-provided changePercent (your sample shows it as decimal, e.g. -0.02488 ≈ -2.49%)
+if "changePercent" in Gold_History_Table.columns:
+    Gold_History_Table["ret_api"] = Gold_History_Table["changePercent"]
+else:
+    Gold_History_Table["ret_api"] = np.nan
+
+Gold_History_Table["log_ret"] = np.log(Gold_History_Table["price"]).diff()
+
+# Cumulative performance
+Gold_History_Table["cum_growth"] = (1 + Gold_History_Table["ret"].fillna(0)).cumprod()
+Gold_History_Table["cum_index"] = 100 * Gold_History_Table["cum_growth"] / Gold_History_Table["cum_growth"].iloc[0]
+
+# Drawdown
+Gold_History_Table["running_max"] = Gold_History_Table["cum_index"].cummax()
+Gold_History_Table["drawdown"] = Gold_History_Table["cum_index"] / Gold_History_Table["running_max"] - 1
+
+# Rolling volatility
+Gold_History_Table["vol_30d"] = Gold_History_Table["ret"].rolling(30).std() * np.sqrt(trading_days)
+Gold_History_Table["vol_90d"] = Gold_History_Table["ret"].rolling(90).std() * np.sqrt(trading_days)
+
+# Monthly & DOW helpers
+Gold_History_Table["year"] = Gold_History_Table.index.year
+Gold_History_Table["month"] = Gold_History_Table.index.month
+Gold_History_Table["dow"] = Gold_History_Table.index.day_name()
+
 #----------------------------#
     # UI #
 #----------------------------#
