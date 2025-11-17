@@ -13,4 +13,4 @@ def fetch_live_gold():
     Gold_Price = requests.get(Live_Gold_Url)
     return Gold_Price.json()
 
-st.write(fetch_live_gold)
+st.write(fetch_live_gold())
