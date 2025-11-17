@@ -59,6 +59,7 @@ st.markdown(
             opacity: 0.9;
         ">
             Updated: {timestamp}
+            color: black;
         </div>
     </div>
     """,
