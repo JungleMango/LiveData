@@ -13,7 +13,11 @@ def fetch_live_gold():
     Gold_Price = requests.get(Live_Gold_Url)
     return Gold_Price.json()
 
-timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+@st.cache_data(ttl=10000)
+def fetch_histo_quotes():
+    Historical_quotes_url = 'https://financialmodelingprep.com/stable/historical-price-eod/full?symbol=XAUUSD&from=2010-11-17&to=2025-11-17&apikey=beUiETWAQ7Ert13VnAd7qkiEqjT1GrFC'
+    All_quotes = requests.get(Historical_quotes_url)
+    return All_quotes.json()
 
 #----------------------------#
     # EXECUTING FUNCTIONS #
@@ -23,6 +27,14 @@ Gold_info = fetch_live_gold()
 Gold_Price = Gold_info[0]["price"]
 P_Change = Gold_info[0]["changePercentage"]
 P_Change_percent = f"{P_Change :.2f}%"
+
+timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+#----------------------------#
+    # TABLES #
+#----------------------------#
+
+Gold_History = pd.DataFrame(fetch_histo_quotes())
 
 
 #----------------------------#
@@ -71,3 +83,5 @@ st.markdown(
     """,
     unsafe_allow_html=True
 )
+
+st.write(Gold_History)
