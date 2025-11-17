@@ -29,8 +29,8 @@ st.write(f"Live Price — ${Gold_Price:,.2f}")
 st.markdown(
         f"""
         <span style="
-            padding: 18px;
-            border-radius: 12px;
+            padding: 0px;
+            border-radius: 0px;
             text-align: center;
             color: white;
             font-size: 14px;
@@ -38,7 +38,7 @@ st.markdown(
             box-shadow: 0 4px 12px rgba(0,0,0,0.25);
             letter-spacing: 1px;
         ">
-            "Gold price — ${Gold_Price:,.2f}
+            Gold price — ${Gold_Price:,.2f}
         </span>
         """,
         unsafe_allow_html=True
