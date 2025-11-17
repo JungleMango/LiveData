@@ -58,10 +58,10 @@ st.markdown(
             margin-top: 6px;
             opacity: 0.9;
         ">
-            Updated: {timestamp}
             <span style ="
-                color: black;
+            color: black;
             ">
+            Updated: {timestamp}
             </span>
         </div>
     </div>
