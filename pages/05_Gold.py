@@ -21,6 +21,7 @@ timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
 Gold_info = fetch_live_gold()
 Gold_Price = Gold_info[0]["price"]
+P_Change = Gold_info[0]["changePercentage"]
 
 #----------------------------#
     # UI #
@@ -51,7 +52,7 @@ st.markdown(
     </style>
 
     <div class="gold-pulse">
-        GOLD — ${Gold_Price:,.2f}
+        GOLD — ${Gold_Price:,.2f} ({P_Change})
         <div style="
             font-size: 14px;
             font-weight: 400;
