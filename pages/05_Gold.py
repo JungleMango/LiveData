@@ -4,8 +4,9 @@ import pandas as pd
 
 
 
-
-
+#----------------------------#
+    # DECLARING FUNCTIONS #
+#----------------------------#
 
 @st.cache_data(ttl=15)
 def fetch_live_gold():
@@ -14,3 +15,11 @@ def fetch_live_gold():
     return Gold_Price.json()
 
 st.write(fetch_live_gold())
+
+#----------------------------#
+    # EXECUTING FUNCTIONS #
+#----------------------------#
+
+Gold_info = fetch_live_gold()
+Gold_Price = Gold_info[0]["price"]
+st.write(Gold_Price)
