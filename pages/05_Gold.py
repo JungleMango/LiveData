@@ -28,19 +28,30 @@ Gold_Price = Gold_info[0]["price"]
 
 st.write(f"Live Price — ${Gold_Price:,.2f}")
 st.markdown(
-        f"""
-        <span style="
-            padding: 0px;
-            border-radius: 0px;
-            text-align: center;
-            color: white;
+    f"""
+    <div style="
+        background: linear-gradient(135deg, #8d6e37, #d4af37, #f5d76e);
+        padding: 20px;
+        border-radius: 14px;
+        text-align: center;
+        color: white;
+        font-size: 34px;
+        font-weight: 700;
+        box-shadow: 0 8px 20px rgba(0,0,0,0.25);
+        letter-spacing: 1px;
+        border: 1px solid rgba(255,255,255,0.25);
+        backdrop-filter: blur(6px);
+    ">
+        GOLD — ${Gold_Price:,.2f}
+        <div style="
             font-size: 14px;
-            font-weight: 700;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.25);
-            letter-spacing: 1px;
+            font-weight: 400;
+            margin-top: 6px;
+            opacity: 0.9;
         ">
-            Gold price — ${Gold_Price:,.2f} as of {timestamp}
-        </span>
-        """,
-        unsafe_allow_html=True
-    )
+            Updated: {timestamp}
+        </div>
+    </div>
+    """,
+    unsafe_allow_html=True
+)
