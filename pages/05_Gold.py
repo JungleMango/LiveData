@@ -3,7 +3,6 @@ import requests
 import pandas as pd 
 from datetime import datetime
 import numpy as np
-from scipy.stats import skew, kurtosis
 import matplotlib.pyplot as plt
 
 
