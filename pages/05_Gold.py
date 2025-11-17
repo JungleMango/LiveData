@@ -19,6 +19,11 @@ def fetch_histo_quotes():
     All_quotes = requests.get(Historical_quotes_url)
     return All_quotes.json()
 
+def divider():
+    st.markdown(
+        "<hr style='border: 0; border-top: 1px solid #ddd; margin: 20px 0;'>",
+        unsafe_allow_html=True
+    )
 #----------------------------#
     # EXECUTING FUNCTIONS #
 #----------------------------#
@@ -83,5 +88,7 @@ st.markdown(
     """,
     unsafe_allow_html=True
 )
+
+divider()
 
 st.write(Gold_History)
