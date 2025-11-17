@@ -188,6 +188,184 @@ col4.metric(
     f"{max_dd * 100:.2f}%",
     help=f"Worst peak-to-trough loss from {dd_start.date()} to {dd_end.date()}.",
 )
+divider()
+# -----------------------------------------
+# 0 — Quant Summary (auto-generated)
+# -----------------------------------------
+# ----------------- core stats -----------------
+last_row = Gold_History_Table.iloc[-1]
+first_row = Gold_History_Table.iloc[0]
+
+mean_daily = Gold_History_Table["ret"].mean()
+std_daily = Gold_History_Table["ret"].std()
+
+annual_return = (1 + mean_daily) ** trading_days - 1
+annual_vol = std_daily * np.sqrt(trading_days)
+sharpe = annual_return / annual_vol if annual_vol > 0 else np.nan
+
+max_dd = Gold_History_Table["drawdown"].min()
+dd_end = Gold_History_Table["drawdown"].idxmin()
+dd_start = Gold_History_Table["cum_index"].loc[:dd_end].idxmax()
+
+# Month-of-year stats
+monthly_ret = (
+    Gold_History_Table["ret"]
+    .resample("M")
+    .apply(lambda x: (1 + x).prod() - 1)
+    .to_frame(name="monthly_ret")
+)
+
+month_stats = (
+    monthly_ret
+    .groupby(monthly_ret.index.month)["monthly_ret"]
+    .agg(["mean", "std", "count"])
+)
+month_stats["mean_pct"] = month_stats["mean"] * 100
+month_stats["std_pct"] = month_stats["std"] * 100
+
+# Day-of-week stats
+dow_stats = Gold_History_Table.groupby("dow")["ret"].agg(["mean", "std", "count"])
+dow_stats["mean_pct"] = dow_stats["mean"] * 100
+dow_stats["std_pct"] = dow_stats["std"] * 100
+
+# Tail-risk stats
+ret_series = Gold_History_Table["ret"].dropna()
+skew_val = ret_series.skew()
+kurt_val = ret_series.kurt()  # excess kurtosis
+var_95 = ret_series.quantile(0.05)
+cvar_95 = ret_series[ret_series <= var_95].mean()
+
+# Momentum vs mean reversion
+lookback = 20
+Gold_History_Table["past20"] = (1 + Gold_History_Table["ret"]).rolling(lookback).apply(lambda x: np.prod(1 + x) - 1)
+Gold_History_Table["future20"] = (
+    (1 + Gold_History_Table["ret"]).shift(-lookback).rolling(lookback).apply(lambda x: np.prod(1 + x) - 1)
+)
+
+test = Gold_History_Table.dropna(subset=["past20", "future20"]).copy()
+bucket_perf = None
+if not test.empty:
+    test["past20_bucket"] = pd.qcut(test["past20"], 5, labels=False)
+    bucket_perf = test.groupby("past20_bucket")["future20"].mean().to_frame("avg_future20")
+    bucket_perf["avg_future20_pct"] = bucket_perf["avg_future20"] * 100
+
+# Short-term vol regime (where is current vol vs history?)
+vol_hist = Gold_History_Table["vol_30d"].dropna()
+current_vol_30 = vol_hist.iloc[-1] if not vol_hist.empty else np.nan
+if not vol_hist.empty and not np.isnan(current_vol_30):
+    vol_percentile = (vol_hist < current_vol_30).mean() * 100
+else:
+    vol_percentile = np.nan
+
+
+st.subheader("0. Quant Summary (Auto-Generated)")
+
+# Build a simple text summary from the stats
+def describe_sharpe(s: float) -> str:
+    if np.isnan(s):
+        return "Sharpe ratio could not be computed."
+    if s < 0:
+        return "Risk-adjusted performance has been **negative overall** (Sharpe < 0)."
+    elif s < 0.5:
+        return "Risk-adjusted performance is **weak** (Sharpe in the 0.0–0.5 range)."
+    elif s < 1.0:
+        return "Risk-adjusted performance is **decent but not amazing** (Sharpe ~0.5–1.0)."
+    else:
+        return "Risk-adjusted performance is **strong** (Sharpe > 1.0)."
+
+def describe_skew_and_kurt(sk: float, kt: float) -> str:
+    direction = "roughly symmetric" if abs(sk) < 0.2 else ("positively skewed (more big up moves than down moves)" if sk > 0 else "negatively skewed (down moves tend to be larger than up moves)")
+    tail = "close to normal" if abs(kt) < 1 else ("fat-tailed with more extreme moves than a normal distribution" if kt > 0 else "light-tailed compared to a normal distribution")
+    return f"Daily return distribution is **{direction}**, and tails are **{tail}**."
+
+# Best / worst month
+if not month_stats.empty:
+    best_month_idx = month_stats["mean"].idxmax()
+    worst_month_idx = month_stats["mean"].idxmin()
+    best_month_name = pd.to_datetime(str(best_month_idx), format="%m").strftime("%b")
+    worst_month_name = pd.to_datetime(str(worst_month_idx), format="%m").strftime("%b")
+    best_month_ret = month_stats.loc[best_month_idx, "mean_pct"]
+    worst_month_ret = month_stats.loc[worst_month_idx, "mean_pct"]
+else:
+    best_month_name = worst_month_name = None
+    best_month_ret = worst_month_ret = np.nan
+
+# Best / worst day-of-week
+if not dow_stats.empty:
+    best_dow = dow_stats["mean"].idxmax()
+    worst_dow = dow_stats["mean"].idxmin()
+    best_dow_ret = dow_stats.loc[best_dow, "mean_pct"]
+    worst_dow_ret = dow_stats.loc[worst_dow, "mean_pct"]
+else:
+    best_dow = worst_dow = None
+    best_dow_ret = worst_dow_ret = np.nan
+
+# Momentum vs mean reversion
+momentum_comment = "Not enough data yet to test 20-day momentum vs mean reversion."
+if bucket_perf is not None:
+    best_bucket = bucket_perf["avg_future20"].idxmax()
+    worst_bucket = bucket_perf["avg_future20"].idxmin()
+    if best_bucket > worst_bucket:
+        momentum_comment = (
+            "On a 20-day horizon, periods with **strong recent gains** tend to be followed by "
+            "relatively **better future returns** → a **momentum tilt**."
+        )
+    elif best_bucket < worst_bucket:
+        momentum_comment = (
+            "On a 20-day horizon, periods with **strong recent gains** tend to be followed by "
+            "**weaker future returns** → a **mean-reverting tilt**."
+        )
+    else:
+        momentum_comment = (
+            "On a 20-day horizon, future returns do not show a strong monotonic relationship with past returns."
+        )
+
+summary_lines = []
+
+summary_lines.append(
+    f"- Over the selected period, gold has compounded at **{(Gold_History_Table['cum_growth'].iloc[-1] - 1) * 100:.2f}%** in total, "
+    f"with an annualized return of **{annual_return * 100:.2f}%** and annualized volatility of **{annual_vol * 100:.2f}%**. "
+    + describe_sharpe(sharpe)
+)
+
+summary_lines.append(
+    f"- The **worst peak-to-trough drawdown** was **{max_dd * 100:.2f}%**, occurring between "
+    f"**{dd_start.date()}** and **{dd_end.date()}**. This is a key measure of downside risk."
+)
+
+summary_lines.append(
+    f"- At the daily level, the **95% historical VaR** is about **{var_95 * 100:.2f}%**, "
+    f"and the **average loss in the worst 5% of days (CVaR)** is about **{cvar_95 * 100:.2f}%**. "
+    + describe_skew_and_kurt(skew_val, kurt_val)
+)
+
+if best_month_name is not None:
+    summary_lines.append(
+        f"- Seasonally, **{best_month_name}** has been the strongest month on average "
+        f"(~{best_month_ret:.2f}% average monthly return), while **{worst_month_name}** has been the weakest "
+        f"(~{worst_month_ret:.2f}%)."
+    )
+
+if best_dow is not None:
+    summary_lines.append(
+        f"- By day-of-week, **{best_dow}** has shown the best average daily return (~{best_dow_ret:.3f}%), "
+        f"whereas **{worst_dow}** has been the softest (~{worst_dow_ret:.3f}%). "
+        "These patterns may reflect how macro news and positioning flow through the week."
+    )
+
+if not np.isnan(current_vol_30):
+    summary_lines.append(
+        f"- The current **30-day annualized volatility** is about **{current_vol_30 * 100:.2f}%**, "
+        f"which sits around the **{vol_percentile:.0f}th percentile** of the past 30-day vol history "
+        "(lower percentiles = calm regime, higher = stressed regime)."
+    )
+
+summary_lines.append(f"- **Momentum vs mean reversion (20 days):** {momentum_comment}")
+
+st.markdown(
+    "Here’s an automatically generated summary of how gold has behaved over the selected period:\n\n"
+    + "\n\n".join(summary_lines)
+)
 
 # -----------------------------------------
 # Section 1 — Price & Cumulative Performance
