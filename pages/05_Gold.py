@@ -22,7 +22,7 @@ timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 Gold_info = fetch_live_gold()
 Gold_Price = Gold_info[0]["price"]
 P_Change = Gold_info[0]["changePercentage"]
-P_Change_percent = f"{P_Change * 100:.2f}%"
+P_Change_percent = f"{P_Change :.2f}%"
 
 
 #----------------------------#
