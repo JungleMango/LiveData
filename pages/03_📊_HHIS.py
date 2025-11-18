@@ -289,7 +289,14 @@ else:
 
     # Show table under it
     st.markdown("#### Underlying Monthly Frequency Table")
-    st.dataframe(heat_table_month, use_container_width=True)
+styled_table = (
+    heat_table_month
+    .style
+    .background_gradient(cmap="Blues")
+    .highlight_max(axis=1, color="#FFD700")
+)
+
+st.dataframe(styled_table, use_container_width=True)
 
 # -------------------------------------------
 # 📊 Quant Summary Box (Dynamic, Professional)
