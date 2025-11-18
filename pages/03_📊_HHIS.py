@@ -3,6 +3,7 @@ import requests
 import pandas as pd 
 import matplotlib.pyplot as plt
 import matplotlib.ticker as mtick
+import numpy as np
 
 
 
@@ -34,6 +35,34 @@ Ticker_Price_log = Ticker_Price_log.sort_values("date")
 price_col = "close"
 Ticker_Price_log["Return"] = Ticker_Price_log[price_col].pct_change()
 returns = Ticker_Price_log["Return"].dropna()
+returns_pct = returns * 100
 
 
 st.dataframe(Ticker_Price_log, hide_index=True)
+
+#----------------------------#
+    # BELL CURVE #
+#----------------------------#
+
+st.subheader("Bell Curve of Daily Returns")
+
+if returns.empty:
+    st.warning("Not enough data to compute returns.")
+else:
+    fig, ax = plt.subplots()
+
+    # Histogram of returns (this is your bell curve)
+    ax.hist(returns, bins=50, density=True)  # density=True → area = 1
+
+    # Optional: overlay a normal distribution for comparison
+    mu = returns.mean()
+    sigma = returns.std()
+    x = np.linspace(returns.min(), returns.max(), 200)
+    normal_pdf = 1 / (sigma * np.sqrt(2 * np.pi)) * np.exp(-0.5 * ((x - mu) / sigma) ** 2)
+    ax.plot(x, normal_pdf)
+
+    ax.set_xlabel("Daily return")
+    ax.set_ylabel("Density")
+    ax.set_title(f"Distribution of Daily Returns for {ticker}")
+
+    st.pyplot(fig)
