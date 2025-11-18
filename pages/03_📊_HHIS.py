@@ -10,7 +10,7 @@ api_key = 'beUiETWAQ7Ert13VnAd7qkiEqjT1GrFC'
 base_url = 'https://financialmodelingprep.com'
 data_type = 'income-statement'
 ticker = st.text_input("Enter Ticker")
-st.write = ("Data pulled from Nov 17 2010")
+st.write("Data pulled from Nov 17 2010")
 years = '120'
 time = 'quarter'
 
