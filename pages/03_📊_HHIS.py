@@ -43,14 +43,11 @@ st.dataframe(Ticker_Price_log, hide_index=True)
 #----------------------------#
     # BELL CURVE #
 #----------------------------#
-st.subheader("📈 Bell Curve of Daily Returns (Quant Optimized)")
+st.subheader("📈 Bell Curve of Daily Returns (Clean & Readable)")
 
 if returns.empty:
     st.warning("Not enough data to compute returns.")
 else:
-    import seaborn as sns
-    sns.set_style("whitegrid")
-
     fig, ax = plt.subplots(figsize=(10, 6))
 
     # --- Stats ---
@@ -60,7 +57,7 @@ else:
     skew_val = returns.skew()
     kurt_val = returns.kurt()
 
-    # --- Histogram ---
+    # --- Histogram (soft, modern style) ---
     ax.hist(
         returns,
         bins=35,
@@ -72,17 +69,19 @@ else:
         label="Histogram"
     )
 
-    # --- KDE Smooth Curve ---
-    sns.kdeplot(
-        returns,
-        ax=ax,
+    # --- SMOOTH KDE-LIKE CURVE (no seaborn needed) ---
+    from scipy.stats import gaussian_kde
+    kde = gaussian_kde(returns)
+    x = np.linspace(returns.min(), returns.max(), 400)
+    ax.plot(
+        x,
+        kde(x),
         color="#9013FE",
         linewidth=2.5,
-        label="KDE (smooth estimate)"
+        label="KDE (smooth curve)"
     )
 
-    # --- Normal Curve ---
-    x = np.linspace(returns.min(), returns.max(), 400)
+    # --- Normal PDF ---
     normal_pdf = (
         1 / (sigma * np.sqrt(2 * np.pi))
         * np.exp(-0.5 * ((x - mu) / sigma) ** 2)
@@ -91,12 +90,12 @@ else:
         x,
         normal_pdf,
         color="#D0021B",
-        linewidth=2.5,
+        linewidth=2.3,
         linestyle="--",
         label="Normal fit"
     )
 
-    # --- Mean Line ---
+    # --- Mean line ---
     ax.axvline(
         mu,
         color="#417505",
@@ -105,7 +104,7 @@ else:
         label=f"Mean ({mu*100:.2f}%)"
     )
 
-    # --- Median Line ---
+    # --- Median line ---
     ax.axvline(
         median,
         color="#F5A623",
@@ -114,7 +113,7 @@ else:
         label=f"Median ({median*100:.2f}%)"
     )
 
-    # --- ±1σ Shaded Region ---
+    # --- Shaded ±1σ region ---
     ax.fill_between(
         x,
         0,
@@ -125,33 +124,34 @@ else:
         label="±1σ range"
     )
 
-    # --- Title ---
+    # --- Title & labels ---
     ax.set_title(
-        f"Distribution of Daily Returns for {ticker}",
-        fontsize=17,
+        f"Daily Return Distribution for {ticker}",
+        fontsize=16,
         fontweight="bold",
         pad=20
     )
-
-    # --- Axis Labels ---
-    ax.set_xlabel("Daily Return (%)", fontsize=13)
+    ax.set_xlabel("Daily return (%)", fontsize=13)
     ax.set_ylabel("Density", fontsize=13)
 
-    # --- Format X axis as percent ---
+    # --- Format x-axis as %
     ax.xaxis.set_major_formatter(mtick.PercentFormatter(1.0))
 
-    # --- Stats Box Inside Chart ---
-    textstr = (
+    # --- Light grid ---
+    ax.grid(alpha=0.25, linestyle="--")
+
+    # --- Stats box ---
+    stats_text = (
         f"Mean: {mu*100:.3f}%\n"
         f"Median: {median*100:.3f}%\n"
-        f"Std Dev (σ): {sigma*100:.3f}%\n"
+        f"Std Dev: {sigma*100:.3f}%\n"
         f"Skew: {skew_val:.3f}\n"
         f"Kurtosis: {kurt_val:.3f}"
     )
 
     ax.text(
         0.98, 0.95,
-        textstr,
+        stats_text,
         transform=ax.transAxes,
         fontsize=11,
         verticalalignment="top",
@@ -163,9 +163,7 @@ else:
     ax.legend(
         bbox_to_anchor=(1.02, 1),
         loc="upper left",
-        borderaxespad=0,
         fontsize=10
     )
 
-    # Render
     st.pyplot(fig)
