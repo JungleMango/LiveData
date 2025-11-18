@@ -60,6 +60,8 @@ Ticker_Price_log["date"] = pd.to_datetime(Ticker_Price_log["date"])
 Ticker_Price_log = Ticker_Price_log.sort_values("date")
 Ticker_Price_log = Ticker_Price_log.set_index("date")
 
+
+
 if not ticker:
     st.info("Please enter a ticker.")
 else:
@@ -76,7 +78,7 @@ returns = Ticker_Price_log["Return"].dropna()
 returns_pct = returns * 100
 
 
-st.dataframe(Ticker_Price_log, hide_index=True)
+st.dataframe(Ticker_Price_log, hide_index=False)
 
 divider()
 
