@@ -212,15 +212,15 @@ else:
 # 📊 Volatility Profile
 # ------------------------------------------------
 
-st.subheader("Volatility Profile — Heatmap of Return Frequencies/Year")
+st.subheader("🔥 Monthly Volatility Profile — Return Frequency Heatmap")
 
 if returns.empty:
-    st.warning("Not enough data to build a heatmap.")
+    st.warning("Not enough data to build a monthly heatmap.")
 else:
-    # Convert returns to percent for intuitive bucketing
+    # Convert returns to percent
     returns_pct = returns * 100
 
-    # Define return buckets (you can tweak these)
+    # Define return buckets
     bins_pct = [-5, -4, -3, -2, -1, -0.5, 0, 0.5, 1, 2, 3, 4, 5]
     labels = [
         "< -5%",
@@ -238,62 +238,58 @@ else:
         "> 4%",
     ]
 
-    # Bucket each daily return into a range
+    # Bucket each return
     buckets = pd.cut(
         returns_pct,
-        bins=bins_pct + [999],   # big upper bound for the last bucket
+        bins=bins_pct + [999],
         labels=labels,
         right=True
     )
 
-    # Prepare a DataFrame with year + bucket for grouping
-    df_heat = pd.DataFrame({
+    # Build monthly index
+    df_monthly = pd.DataFrame({
         "year": returns.index.year,
+        "month": returns.index.month,
         "bucket": buckets
     })
 
-    # Count number of days per (year, bucket)
-    heat_table = (
-        df_heat
-        .groupby(["year", "bucket"])
+    # Create YYYY-MM labels
+    df_monthly["period"] = df_monthly["year"].astype(str) + "-" + df_monthly["month"].astype(str).str.zfill(2)
+
+    # Compute frequency table by month
+    heat_table_month = (
+        df_monthly
+        .groupby(["period", "bucket"])
         .size()
         .unstack(fill_value=0)
-        .reindex(columns=labels)      # ensure consistent column order
-        .sort_index()
+        .reindex(columns=labels)
     )
 
     # Plot heatmap
-    fig, ax = plt.subplots(figsize=(12, 6))
+    fig, ax = plt.subplots(figsize=(14, 10))
 
-    im = ax.imshow(heat_table.values, aspect="auto")
+    im = ax.imshow(heat_table_month.values, aspect="auto", cmap="viridis")
 
-    # Axis ticks & labels
-    ax.set_yticks(np.arange(len(heat_table.index)))
-    ax.set_yticklabels(heat_table.index)
+    # Y-axis = months
+    ax.set_yticks(np.arange(len(heat_table_month.index)))
+    ax.set_yticklabels(heat_table_month.index)
 
-    ax.set_xticks(np.arange(len(heat_table.columns)))
-    ax.set_xticklabels(heat_table.columns, rotation=45, ha="right")
+    # X-axis = buckets
+    ax.set_xticks(np.arange(len(heat_table_month.columns)))
+    ax.set_xticklabels(heat_table_month.columns, rotation=45, ha="right")
 
-    ax.set_title(f"Return Frequency Heatmap for {ticker}", fontsize=16, pad=15)
+    ax.set_title(f"Monthly Return-Frequency Heatmap for {ticker}", fontsize=16, pad=15)
     ax.set_xlabel("Daily Return Bucket (%)")
-    ax.set_ylabel("Year")
+    ax.set_ylabel("Month")
 
-    # Colorbar: how many days in each cell
     cbar = fig.colorbar(im, ax=ax)
     cbar.set_label("Number of days")
 
     st.pyplot(fig)
 
-    # Also show the underlying table for exact numbers
-    st.markdown("#### Underlying Frequency Table")
-    st.dataframe(
-        heat_table,
-        use_container_width=True
-    )
-
-
-
-
+    # Show table under it
+    st.markdown("#### Underlying Monthly Frequency Table")
+    st.dataframe(heat_table_month, use_container_width=True)
 
 # -------------------------------------------
 # 📊 Quant Summary Box (Dynamic, Professional)
