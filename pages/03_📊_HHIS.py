@@ -43,53 +43,129 @@ st.dataframe(Ticker_Price_log, hide_index=True)
 #----------------------------#
     # BELL CURVE #
 #----------------------------#
-
-st.subheader("📈 Bell Curve of Daily Returns")
+st.subheader("📈 Bell Curve of Daily Returns (Quant Optimized)")
 
 if returns.empty:
     st.warning("Not enough data to compute returns.")
 else:
-    fig, ax = plt.subplots()
+    import seaborn as sns
+    sns.set_style("whitegrid")
 
-    # Histogram of returns (this is your bell curve)
-    # density=True → area under all bars = 1 (probability density)
-    n, bins, patches = ax.hist(returns, bins=50, density=True)
+    fig, ax = plt.subplots(figsize=(10, 6))
 
-    # Basic stats
-    mu = returns.mean()        # mean (decimal)
-    sigma = returns.std()      # standard deviation (decimal)
-    median = returns.median()  # median (decimal)
+    # --- Stats ---
+    mu = returns.mean()
+    sigma = returns.std()
+    median = returns.median()
+    skew_val = returns.skew()
+    kurt_val = returns.kurt()
 
-    # Normal distribution overlay with same mean & std
+    # --- Histogram ---
+    ax.hist(
+        returns,
+        bins=35,
+        density=True,
+        color="#4A90E2",
+        alpha=0.35,
+        edgecolor="white",
+        linewidth=0.7,
+        label="Histogram"
+    )
+
+    # --- KDE Smooth Curve ---
+    sns.kdeplot(
+        returns,
+        ax=ax,
+        color="#9013FE",
+        linewidth=2.5,
+        label="KDE (smooth estimate)"
+    )
+
+    # --- Normal Curve ---
     x = np.linspace(returns.min(), returns.max(), 400)
     normal_pdf = (
         1 / (sigma * np.sqrt(2 * np.pi))
         * np.exp(-0.5 * ((x - mu) / sigma) ** 2)
     )
-    ax.plot(x, normal_pdf, linewidth=2, label="Normal PDF")
+    ax.plot(
+        x,
+        normal_pdf,
+        color="#D0021B",
+        linewidth=2.5,
+        linestyle="--",
+        label="Normal fit"
+    )
 
-    # Vertical lines: mean & median
-    ax.axvline(mu, linestyle="--", linewidth=2, label=f"Mean ({mu*100:.2f}%)")
-    ax.axvline(median, linestyle=":", linewidth=2, label=f"Median ({median*100:.2f}%)")
+    # --- Mean Line ---
+    ax.axvline(
+        mu,
+        color="#417505",
+        linestyle="--",
+        linewidth=2,
+        label=f"Mean ({mu*100:.2f}%)"
+    )
 
-    # Shade ±1 standard deviation region under the normal curve
+    # --- Median Line ---
+    ax.axvline(
+        median,
+        color="#F5A623",
+        linestyle=":",
+        linewidth=2,
+        label=f"Median ({median*100:.2f}%)"
+    )
+
+    # --- ±1σ Shaded Region ---
     ax.fill_between(
         x,
         0,
         normal_pdf,
-        where=(x >= mu - sigma) & (x <= mu + sigma),
-        alpha=0.2,
-        label="±1σ region",
+        where=((x >= mu - sigma) & (x <= mu + sigma)),
+        color="#50E3C2",
+        alpha=0.25,
+        label="±1σ range"
     )
 
-    # Labels & formatting
-    ax.set_title(f"Distribution of Daily Returns — {ticker}")
-    ax.set_xlabel("Daily return")
-    ax.set_ylabel("Density")
+    # --- Title ---
+    ax.set_title(
+        f"Distribution of Daily Returns for {ticker}",
+        fontsize=17,
+        fontweight="bold",
+        pad=20
+    )
 
-    # Show x-axis as percentages (0.01 → 1%)
+    # --- Axis Labels ---
+    ax.set_xlabel("Daily Return (%)", fontsize=13)
+    ax.set_ylabel("Density", fontsize=13)
+
+    # --- Format X axis as percent ---
     ax.xaxis.set_major_formatter(mtick.PercentFormatter(1.0))
 
-    ax.legend()
+    # --- Stats Box Inside Chart ---
+    textstr = (
+        f"Mean: {mu*100:.3f}%\n"
+        f"Median: {median*100:.3f}%\n"
+        f"Std Dev (σ): {sigma*100:.3f}%\n"
+        f"Skew: {skew_val:.3f}\n"
+        f"Kurtosis: {kurt_val:.3f}"
+    )
 
+    ax.text(
+        0.98, 0.95,
+        textstr,
+        transform=ax.transAxes,
+        fontsize=11,
+        verticalalignment="top",
+        horizontalalignment="right",
+        bbox=dict(boxstyle="round,pad=0.3", facecolor="white", alpha=0.8)
+    )
+
+    # --- Legend outside ---
+    ax.legend(
+        bbox_to_anchor=(1.02, 1),
+        loc="upper left",
+        borderaxespad=0,
+        fontsize=10
+    )
+
+    # Render
     st.pyplot(fig)
