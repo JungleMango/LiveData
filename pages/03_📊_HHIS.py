@@ -29,6 +29,6 @@ def fetch_histo_quotes():
 #----------------------------#
 
 All_Quotes = fetch_histo_quotes(ticker)
-Ticker_Price_log = pd.dataFrame("All_Quotes")
+Ticker_Price_log = pd.dataFrame(All_Quotes)
 
 Ticker_Price_log
