@@ -31,5 +31,9 @@ All_Quotes = fetch_histo_quotes(ticker)
 Ticker_Price_log = pd.DataFrame(All_Quotes)
 Ticker_Price_log["date"] = pd.to_datetime(Ticker_Price_log["date"])
 Ticker_Price_log = Ticker_Price_log.sort_values("date")
+price_col = "close"
+Ticker_Price_log["Return"] = Ticker_Price_log[price_col].pct_change()
+returns = Ticker_Price_log["Return"].dropna()
+
 
 st.dataframe(Ticker_Price_log, hide_index=True)
