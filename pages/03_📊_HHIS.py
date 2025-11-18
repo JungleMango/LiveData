@@ -4,15 +4,24 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import matplotlib.ticker as mtick
 import numpy as np
+from datetime import date
 
 
 
 api_key = 'beUiETWAQ7Ert13VnAd7qkiEqjT1GrFC'
 base_url = 'https://financialmodelingprep.com'
-data_type = 'income-statement'
 ticker = st.text_input("Enter Ticker")
-years = '120'
-time = 'quarter'
+
+# Default date range (you can tweak this)
+default_from = date(2010, 11, 17)
+default_to = date.today()
+
+col1, col2 = st.columns(2)
+with col1:
+    from_date = st.date_input("From date", value=default_from)
+with col2:
+    to_date = st.date_input("To date", value=default_to)
+
 
 #----------------------------#
     # DECLARING FUNCTIONS #
@@ -24,11 +33,22 @@ def divider():
         unsafe_allow_html=True
     )
 
+
 @st.cache_data(ttl=10000)
-def fetch_histo_quotes(ticker):
-    Historical_quotes_url = f'{base_url}/stable/historical-price-eod/full?symbol={ticker}&from=2010-11-17&to=2025-11-17&apikey={api_key}'
-    All_quotes = requests.get(Historical_quotes_url)
-    return All_quotes.json()
+def fetch_histo_quotes(ticker: str, from_date: date, to_date: date):
+    # Convert date objects to YYYY-MM-DD strings
+    from_str = from_date.isoformat()
+    to_str = to_date.isoformat()
+
+    historical_quotes_url = (
+        f"{base_url}/stable/historical-price-eod/full"
+        f"?symbol={ticker}&from={from_str}&to={to_str}&apikey={api_key}"
+    )
+
+    resp = requests.get(historical_quotes_url, timeout=15)
+    resp.raise_for_status()
+    data = resp.json()
+    return data
 
 #----------------------------#
     # EXECUTING FUNCTIONS #
@@ -39,6 +59,16 @@ Ticker_Price_log = pd.DataFrame(All_Quotes)
 Ticker_Price_log["date"] = pd.to_datetime(Ticker_Price_log["date"])
 Ticker_Price_log = Ticker_Price_log.sort_values("date")
 Ticker_Price_log = Ticker_Price_log.set_index("date")
+
+if not ticker:
+    st.info("Please enter a ticker.")
+else:
+    if from_date > to_date:
+        st.error("From date must be earlier than To date.")
+    else:
+        all_quotes = fetch_histo_quotes(ticker, from_date, to_date)
+        # Now you can turn this into a DataFrame, etc.
+        # Ticker_Price_log = pd.DataFrame(all_quotes)
 
 price_col = "close"
 Ticker_Price_log["Return"] = Ticker_Price_log[price_col].pct_change()
@@ -71,7 +101,7 @@ else:
     ax.hist(
         returns,
         bins=35,
-        density=True,
+        density=False,
         color="#4A90E2",
         alpha=0.35,
         edgecolor="white",
