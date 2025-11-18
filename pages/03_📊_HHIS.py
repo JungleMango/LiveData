@@ -18,6 +18,12 @@ time = 'quarter'
     # DECLARING FUNCTIONS #
 #----------------------------#
 
+def divider():
+    st.markdown(
+        "<hr style='border: 0; border-top: 1px solid #ddd; margin: 20px 0;'>",
+        unsafe_allow_html=True
+    )
+
 @st.cache_data(ttl=10000)
 def fetch_histo_quotes(ticker):
     Historical_quotes_url = f'{base_url}/stable/historical-price-eod/full?symbol={ticker}&from=2010-11-17&to=2025-11-17&apikey={api_key}'
@@ -39,6 +45,8 @@ returns_pct = returns * 100
 
 
 st.dataframe(Ticker_Price_log, hide_index=True)
+
+divider()
 
 #----------------------------#
     # BELL CURVE #
@@ -167,3 +175,106 @@ else:
     )
 
     st.pyplot(fig)
+
+# -------------------------------------------
+# 📘 Explanation of the Bell Curve (Dynamic)
+# -------------------------------------------
+
+st.markdown("### 📘 Interpretation of the Bell Curve")
+
+explanation = f"""
+The chart above shows the **distribution of daily returns** for **{ticker}**, based on
+its historical price data.
+
+Here’s what each component means:
+
+### **🔹 1. Histogram (blue bars)**
+This represents how often certain daily returns occurred.
+
+- Taller bars = that return range occurred more often  
+- Wider spread = more volatility  
+- Narrow spread = more stable price movements  
+
+This histogram is normalized into a **probability density**, meaning the total area = 1.
+
+---
+
+### **🔹 2. KDE Curve (purple smooth line)**
+This is a smoothed estimate of the return distribution.
+
+It helps reveal the **true shape** of the distribution:
+- Fat tails
+- Skewness (asymmetry)
+- Sharp or wide peaks
+
+KDE is often preferred by quants because it doesn’t assume normality.
+
+---
+
+### **🔹 3. Normal Distribution Curve (red dashed line)**
+This curve represents what the returns **would look like** *if* they were perfectly normal
+(bell-shaped) with the same mean and standard deviation.
+
+Comparing the blue histogram and purple KDE curve to the red normal curve shows:
+- Whether volatility is higher than expected  
+- Whether extreme events occur more often (fat tails)  
+- Whether returns are symmetric or skewed  
+
+---
+
+### **🔹 4. Mean Line (green dashed) — {mu*100:.3f}%**
+This is the **average daily return**.
+
+A positive mean indicates long-term upward drift.
+A negative mean indicates long-term decay.
+
+---
+
+### **🔹 5. Median Line (orange dotted) — {median*100:.3f}%**
+The middle value of all daily returns.
+
+If mean ≠ median, the distribution is skewed.
+
+---
+
+### **🔹 6. ±1σ Region (mint shaded) — ±{sigma*100:.3f}%**
+This shows the range in which **68% of daily returns would fall** *if* returns were normal.
+
+Comparing this shaded region to actual data helps you understand:
+- Whether gold/HHIS has fatter tails  
+- Whether risk is higher than normal  
+- Whether volatility is unusual  
+
+---
+
+### **🔹 7. Skewness — {skew_val:.3f}**
+- Positive skew → big upside spikes
+- Negative skew → big downside crashes  
+- Near zero → symmetric distribution  
+
+Most financial assets are **negatively skewed** (crashes are worse than euphoria).
+
+---
+
+### **🔹 8. Kurtosis — {kurt_val:.3f}**
+- Above 0 = **fat tails** (extreme events more likely than normal distribution)
+- Below 0 = light tails  
+- Exactly 0 = perfect normal distribution  
+
+Fat tails are common in:
+- equities  
+- commodities  
+- crypto  
+- FX  
+
+and are important for risk management.
+
+---
+
+### **📊 Summary**
+This bell curve lets you quickly see whether **{ticker}** behaves normally, trends,
+crashes often, or has unusual volatility patterns.  
+It’s a core quant tool for understanding an asset’s risk profile.
+"""
+
+st.markdown(explanation)
