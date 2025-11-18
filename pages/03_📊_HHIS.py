@@ -19,7 +19,7 @@ time = 'quarter'
 #----------------------------#
 
 @st.cache_data(ttl=10000)
-def fetch_histo_quotes():
+def fetch_histo_quotes(ticker):
     Historical_quotes_url = f'{base_url}/stable/historical-price-eod/full?symbol={ticker}&from=2010-11-17&to=2025-11-17&apikey={api_key}'
     All_quotes = requests.get(Historical_quotes_url)
     return All_quotes.json()
