@@ -39,6 +39,7 @@ Ticker_Price_log = pd.DataFrame(All_Quotes)
 Ticker_Price_log["date"] = pd.to_datetime(Ticker_Price_log["date"])
 Ticker_Price_log = Ticker_Price_log.sort_values("date")
 Ticker_Price_log = Ticker_Price_log.set_index("date")
+
 price_col = "close"
 Ticker_Price_log["Return"] = Ticker_Price_log[price_col].pct_change()
 returns = Ticker_Price_log["Return"].dropna()
@@ -178,51 +179,8 @@ else:
     st.pyplot(fig)
 
 # ------------------------------------------------
-# 📊 Return Bucket Table (Counts + Percentages)
+# 📊 Volatility Profile
 # ------------------------------------------------
-
-st.subheader("📋 Return Bucket Table")
-
-# Define the buckets in PERCENT (easier to interpret)
-bins_pct = [-5, -4, -3, -2, -1, -0.5, 0, 0.5, 1, 2, 3, 4, 5]
-labels = [
-    "< -5%",
-    "-5% to -4%",
-    "-4% to -3%",
-    "-3% to -2%",
-    "-2% to -1%",
-    "-1% to -0.5%",
-    "-0.5% to 0%",
-    "0% to 0.5%",
-    "0.5% to 1%",
-    "1% to 2%",
-    "2% to 3%",
-    "3% to 4%",
-    "> 4%"
-]
-
-# Convert returns to percent for bucketing
-returns_pct = returns * 100
-
-# Use pd.cut to bucket the returns
-bucketed = pd.cut(
-    returns_pct,
-    bins=bins_pct + [999],    # add a big upper bound for >4%
-    labels=labels,
-    right=True
-)
-
-# Count how many days in each bucket
-bucket_counts = bucketed.value_counts().reindex(labels, fill_value=0)
-
-# Convert to DataFrame
-bucket_table = pd.DataFrame({
-    "Range": labels,
-    "Days": bucket_counts.values,
-    "Percent of Days": (bucket_counts.values / len(returns) * 100).round(2)
-})
-
-st.dataframe(bucket_table, use_container_width=True)
 
 st.subheader("🔥 Volatility Profile — Heatmap of Return Frequencies by Year")
 
