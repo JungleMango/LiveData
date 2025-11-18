@@ -182,7 +182,7 @@ else:
 # 📊 Volatility Profile
 # ------------------------------------------------
 
-st.subheader("🔥 Volatility Profile — Heatmap of Return Frequencies by Year")
+st.subheader("Volatility Profile — Heatmap of Return Frequencies/Year")
 
 if returns.empty:
     st.warning("Not enough data to build a heatmap.")
