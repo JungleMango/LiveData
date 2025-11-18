@@ -493,4 +493,162 @@ Together, these metrics suggest that **{ticker}** behaves like a(n) **{"trend-fo
 st.markdown(summary_text)
 
 divider()
-sum
+
+# -------------------------------------------
+# 📊 What if ?
+# -------------------------------------------
+
+
+st.subheader("📈 Historical + Projected Growth for " + ticker)
+
+# Ensure proper types
+Ticker_Price_log["date"] = pd.to_datetime(Ticker_Price_log["date"])
+Ticker_Price_log = Ticker_Price_log.sort_values("date")
+
+# --- User controls ---
+col_ctrl1, col_ctrl2 = st.columns(2)
+
+with col_ctrl1:
+    initial_invest = st.number_input(
+        "Initial investment ($)",
+        min_value=100.0,
+        value=10000.0,
+        step=500.0
+    )
+    start_date_sel = st.date_input(
+        "Backtest start date",
+        value=Ticker_Price_log["date"].min().date()
+    )
+
+with col_ctrl2:
+    annual_price_growth = st.number_input(
+        "Assumed annual price growth (excl. dividends) %",
+        min_value=-50.0,
+        max_value=50.0,
+        value=6.0,
+        step=0.5,
+        help="This is the forward-looking price growth rate you want to test."
+    )
+    annual_div_yield = st.number_input(
+        "Assumed annual dividend yield %",
+        min_value=0.0,
+        max_value=20.0,
+        value=2.0,
+        step=0.5,
+        help="Forward-looking dividend yield. Used for projections only."
+    )
+
+years_ahead = st.slider(
+    "Projection horizon (years)",
+    min_value=1,
+    max_value=30,
+    value=10
+)
+
+div_policy = st.radio(
+    "Dividend treatment",
+    ["Reinvest dividends", "Take dividends as cash"],
+    index=0
+)
+
+# --- Historical growth (based on actual prices) ---
+hist = Ticker_Price_log[Ticker_Price_log["date"] >= pd.to_datetime(start_date_sel)].copy()
+
+if hist.empty:
+    st.warning("No historical data after the selected start date.")
+else:
+    # Scale historical prices to an investment starting at 'initial_invest'
+    start_price = hist["close"].iloc[0]
+    hist["portfolio_value"] = initial_invest * (hist["close"] / start_price)
+
+    # --- Future projection (constant growth model) ---
+
+    # Use monthly compounding for future
+    periods = years_ahead * 12
+    last_hist_date = hist["date"].iloc[-1]
+    future_dates = pd.date_range(
+        last_hist_date + pd.Timedelta(days=1),
+        periods=periods,
+        freq="M"
+    )
+
+    # Convert annual rates to monthly
+    price_growth_monthly = (1 + annual_price_growth / 100.0) ** (1 / 12.0) - 1
+    div_yield_monthly = (1 + annual_div_yield / 100.0) ** (1 / 12.0) - 1
+
+    # Start from last historical portfolio value
+    value_reinvest = hist["portfolio_value"].iloc[-1]
+    value_no = hist["portfolio_value"].iloc[-1]
+    cash_divs = 0.0
+
+    proj_reinvest = []
+    proj_no_reinvest = []
+    proj_cash_divs = []
+
+    for _ in range(periods):
+        # Reinvest scenario: dividends increase the invested value
+        value_reinvest *= (1 + price_growth_monthly + div_yield_monthly)
+        proj_reinvest.append(value_reinvest)
+
+        # No-reinvest scenario:
+        # - price grows
+        # - dividends are taken as cash (not compounding in the portfolio)
+        value_no *= (1 + price_growth_monthly)
+        cash_divs += value_no * div_yield_monthly
+        proj_no_reinvest.append(value_no)
+        proj_cash_divs.append(cash_divs)
+
+    future_df = pd.DataFrame({
+        "date": future_dates,
+        "proj_reinvest": proj_reinvest,
+        "proj_no_reinvest": proj_no_reinvest,
+        "div_cash": proj_cash_divs,
+    })
+
+    # --- Combine historical + future for chart ---
+    hist_plot = hist[["date", "portfolio_value"]].copy()
+    hist_plot = hist_plot.rename(columns={"portfolio_value": "Historical"})
+
+    future_plot = future_df.rename(columns={
+        "proj_reinvest": "Projected (Reinvest)",
+        "proj_no_reinvest": "Projected (No reinvest)"
+    })
+
+    combined = pd.concat([
+        hist_plot,
+        future_plot[["date", "Projected (Reinvest)", "Projected (No reinvest)"]]
+    ], ignore_index=True)
+
+    combined = combined.set_index("date")
+
+    # Choose which lines to display based on user dividend policy
+    if div_policy == "Reinvest dividends":
+        chart_df = combined[["Historical", "Projected (Reinvest)"]]
+    else:
+        chart_df = combined[["Historical", "Projected (No reinvest)"]]
+
+    st.line_chart(chart_df, use_container_width=True)
+
+    # --- Text summary ---
+    st.markdown("#### 📘 Projection Summary")
+
+    final_reinvest = future_df["proj_reinvest"].iloc[-1]
+    final_no = future_df["proj_no_reinvest"].iloc[-1]
+    final_cash = future_df["div_cash"].iloc[-1]
+
+    st.markdown(
+        f"""
+- Initial investment: **${initial_invest:,.2f}**
+- Historical period: **{hist['date'].iloc[0].date()} → {hist['date'].iloc[-1].date()}**
+- Projection horizon: **{years_ahead} years**
+- Assumed annual price growth: **{annual_price_growth:.2f}%**
+- Assumed annual dividend yield: **{annual_div_yield:.2f}%**
+
+**If dividends are reinvested**:
+- Projected portfolio value after {years_ahead} years: **${final_reinvest:,.2f}**
+
+**If dividends are taken as cash**:
+- Projected portfolio (price only) after {years_ahead} years: **${final_no:,.2f}**
+- Total dividends collected in cash: **${final_cash:,.2f}**
+"""
+    )
