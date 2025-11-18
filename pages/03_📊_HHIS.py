@@ -293,6 +293,71 @@ else:
     )
 
 
+# ------------------------------------------------
+# Monte Carlo
+# ------------------------------------------------
+
+
+
+st.subheader("🔮 Monte Carlo Simulation (Bootstrap from Historical Returns)")
+
+if returns.empty:
+    st.warning("Not enough data to run simulations.")
+else:
+    sim_horizon = st.slider("Simulation horizon (days)", min_value=5, max_value=252, value=20, step=5)
+    n_sims = st.slider("Number of simulations", min_value=500, max_value=5000, value=2000, step=500)
+
+    # Convert series to numpy for speed
+    ret_array = returns.values
+
+    # Simulate: each column is one path of sim_horizon days
+    rng = np.random.default_rng()
+    sims = rng.choice(ret_array, size=(sim_horizon, n_sims), replace=True)
+
+    # Convert to cumulative returns
+    sim_cum_rets = (1 + sims).prod(axis=0) - 1
+
+    # Convert to simulated prices from last_price
+    sim_final_prices = last_price * (1 + sim_cum_rets)
+
+    # Summary stats
+    p05 = np.percentile(sim_cum_rets, 5) * 100
+    p50 = np.percentile(sim_cum_rets, 50) * 100
+    p95 = np.percentile(sim_cum_rets, 95) * 100
+
+    st.markdown(
+        f"Simulated **{n_sims} paths** over **{sim_horizon} trading days** using bootstrapped daily "
+        f"returns from historical data."
+    )
+
+    c1, c2, c3 = st.columns(3)
+    c1.metric(f"{sim_horizon}-day P5 return", f"{p05:.2f}%")
+    c2.metric(f"{sim_horizon}-day Median (P50)", f"{p50:.2f}%")
+    c3.metric(f"{sim_horizon}-day P95 return", f"{p95:.2f}%")
+
+    # Plot histogram of simulated cumulative returns
+    fig, ax = plt.subplots(figsize=(8, 5))
+    ax.hist(sim_cum_rets * 100, bins=40, color="#4A90E2", alpha=0.7, edgecolor="white")
+    ax.set_title(f"Simulated {sim_horizon}-Day Returns for {ticker}")
+    ax.set_xlabel(f"{sim_horizon}-Day Return (%)")
+    ax.set_ylabel("Number of simulations")
+    ax.axvline(p05, color="red", linestyle="--", label=f"P5 ({p05:.2f}%)")
+    ax.axvline(p50, color="green", linestyle="--", label=f"P50 ({p50:.2f}%)")
+    ax.axvline(p95, color="orange", linestyle="--", label=f"P95 ({p95:.2f}%)")
+    ax.legend()
+    ax.grid(alpha=0.3, linestyle="--")
+
+    st.pyplot(fig)
+
+    st.markdown(
+        f"- **P5** ≈ very bad scenario (only 5% of simulations are worse)\n"
+        f"- **P50** = median scenario\n"
+        f"- **P95** ≈ very good scenario (only 5% of simulations are better)\n\n"
+        f"You can interpret this as: over the next **{sim_horizon} days**, based on past behavior, "
+        f"there is about a 90% chance the total return falls between roughly **{p05:.1f}%** and **{p95:.1f}%**."
+    )
+
+
 
 # ------------------------------------------------
 # Empirical Return Probabilities
