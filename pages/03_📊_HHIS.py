@@ -77,6 +77,8 @@ Ticker_Price_log["Return"] = Ticker_Price_log[price_col].pct_change()
 returns = Ticker_Price_log["Return"].dropna()
 returns_pct = returns * 100
 
+st.write("Columns:", Ticker_Price_log.columns.tolist())
+
 
 st.dataframe(Ticker_Price_log, hide_index=False)
 
