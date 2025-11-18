@@ -71,7 +71,7 @@ else:
     ax.hist(
         returns,
         bins=35,
-        density=False,
+        density=True,
         color="#4A90E2",
         alpha=0.35,
         edgecolor="white",
