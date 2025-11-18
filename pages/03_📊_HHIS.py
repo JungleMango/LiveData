@@ -193,7 +193,7 @@ p_tail_1 = (returns < -0.01).mean() * 100      # probability of a daily loss < -
 p_big_up  = (returns > 0.02).mean() * 100      # probability of a daily gain > +2%
 
 summary_text = f"""
-> **Here’s what the return distribution tells us about `{ticker}` from a quantitative risk and behavior perspective:**  
+**Here’s what the return distribution tells us about `{ticker}` from a quantitative risk and behavior perspective:**  
 
 ### **Return Behavior**
 - Average daily return is **{mu*100:.3f}%**, which annualizes to **{annual_mean*100:.2f}%**.
