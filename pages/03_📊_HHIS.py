@@ -93,6 +93,7 @@ else:
     # --- Stats ---
     mu = returns.mean()
     sigma = returns.std()
+    last_price = Ticker_Price_log["close"].iloc[-1]
     median = returns.median()
     skew_val = returns.skew()
     kurt_val = returns.kurt()
@@ -293,10 +294,52 @@ else:
 
 
 
+# ------------------------------------------------
+# Empirical Return Probabilities
+# ------------------------------------------------
 
+st.subheader("🎯 Empirical Return Probabilities")
+
+if returns.empty:
+    st.warning("Not enough data to compute probabilities.")
+else:
+    # Let user choose horizon and thresholds
+    horizon = st.slider("Horizon (days)", min_value=1, max_value=60, value=5, step=1)
+    loss_threshold = st.number_input("Loss threshold (%)", value=-5.0, step=0.5)
+    gain_threshold = st.number_input("Gain threshold (%)", value=5.0, step=0.5)
+
+    # Build rolling horizon returns (compounded)
+    rolling_ret = (
+        (1 + returns)
+        .rolling(horizon)
+        .apply(lambda x: (1 + x).prod() - 1, raw=False)
+        .dropna()
+    )
+
+    # Convert thresholds from % to decimal
+    loss_dec = loss_threshold / 100.0
+    gain_dec = gain_threshold / 100.0
+
+    # Probabilities
+    prob_loss = (rolling_ret <= loss_dec).mean() * 100
+    prob_gain = (rolling_ret >= gain_dec).mean() * 100
+    prob_positive = (rolling_ret > 0).mean() * 100
+
+    col1, col2, col3 = st.columns(3)
+    col1.metric(f"P({horizon}-day return ≤ {loss_threshold:.1f}%)", f"{prob_loss:.2f}%")
+    col2.metric(f"P({horizon}-day return ≥ {gain_threshold:.1f}%)", f"{prob_gain:.2f}%")
+    col3.metric(f"P({horizon}-day return > 0%)", f"{prob_positive:.2f}%")
+
+    st.markdown(
+        f"These probabilities are **purely empirical**, using rolling {horizon}-day returns from your "
+        f"historical sample of {len(rolling_ret)} overlapping periods."
+    )
+
+
+divider()
 
 # -------------------------------------------
-# 📊 Quant Summary Box (Dynamic, Professional)
+# 📊 Quant Summary Box 
 # -------------------------------------------
 
 st.markdown("Summary")
@@ -349,3 +392,6 @@ Together, these metrics suggest that **{ticker}** behaves like a(n) **{"trend-fo
 """
 
 st.markdown(summary_text)
+
+divider()
+sum
