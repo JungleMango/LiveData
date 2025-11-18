@@ -180,7 +180,7 @@ else:
 # 📊 Quant Summary Box (Dynamic, Professional)
 # -------------------------------------------
 
-st.markdown("### 📊 Quant Summary (Auto-Generated Insights)")
+st.markdown("Summary")
 
 # Annualize volatility (typical for daily data)
 trading_days = 252
@@ -195,15 +195,15 @@ p_big_up  = (returns > 0.02).mean() * 100      # probability of a daily gain > +
 summary_text = f"""
 > **Here’s what the return distribution tells us about `{ticker}` from a quantitative risk and behavior perspective:**  
 
-### **📌 Return Behavior**
+### **Return Behavior**
 - Average daily return is **{mu*100:.3f}%**, which annualizes to **{annual_mean*100:.2f}%**.
 - Median return is **{median*100:.3f}%**, showing that typical days are {'stronger' if median>mu else 'weaker'} than the mean.
 
-### **📌 Volatility & Risk**
+### **Volatility & Risk**
 - Daily volatility is **{sigma*100:.3f}%**, which annualizes to **{annual_vol*100:.2f}%**.
 - This places **{ticker}** in the category of {"high" if annual_vol>0.25 else "moderate" if annual_vol>0.10 else "low"} volatility assets.
 
-### **📌 Tail Risk**
+### **Tail Risk**
 - Probability of a daily drop worse than **–2%**: **{p_tail_2:.2f}%**
 - Probability of a daily drop worse than **–1%**: **{p_tail_1:.2f}%**
 - Probability of a daily gain above **+2%**: **{p_big_up:.2f}%**
@@ -215,18 +215,18 @@ summary_text = f"""
 "This asset shows occasional extreme moves, but not pathologically so."
 }
 
-### **📌 Skewness & Crash Risk**
+### **Skewness & Crash Risk**
 - Skewness is **{skew_val:.3f}**, indicating:
   - {"Upside spikes dominate (positive skew)." if skew_val>0 else
      "Downside crashes dominate (negative skew)." if skew_val<0 else
      "Returns are symmetric."}
 
-### **📌 Kurtosis (Fat Tails)**
+### **Kurtosis (Fat Tails)**
 - Kurtosis is **{kurt_val:.3f}**  
   - Values > 0 mean **fat tails** → extreme moves happen more often than a normal model suggests.
   - Values < 0 mean light tails → fewer extreme moves.
 
-### **🎯 Overall Quant Rating**
+### **Overall Quant Rating**
 - **Return Quality:** {"Strong" if mu>0 else "Weak"}
 - **Volatility:** {"High" if annual_vol>0.25 else "Moderate" if annual_vol>0.10 else "Low"}
 - **Tail Risk:** {"Elevated" if kurt_val>0 else "Normal"}
