@@ -29,5 +29,7 @@ def fetch_histo_quotes(ticker):
 
 All_Quotes = fetch_histo_quotes(ticker)
 Ticker_Price_log = pd.DataFrame(All_Quotes)
+Ticker_Price_log["Date"] = pd.to_datetime(Ticker_Price_log["date"])
+Ticker_Price_log = Ticker_Price_log.sort_values("Date")
 
-st.dataframe(Ticker_Price_log)
+st.dataframe(Ticker_Price_log, hide_index=True)
