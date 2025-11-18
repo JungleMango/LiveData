@@ -30,4 +30,4 @@ def fetch_histo_quotes(ticker):
 All_Quotes = fetch_histo_quotes(ticker)
 Ticker_Price_log = pd.DataFrame(All_Quotes)
 
-Ticker_Price_log
+st.write(Ticker_Price_log)
