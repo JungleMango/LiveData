@@ -177,104 +177,62 @@ else:
     st.pyplot(fig)
 
 # -------------------------------------------
-# 📘 Explanation of the Bell Curve (Dynamic)
+# 📊 Quant Summary Box (Dynamic, Professional)
 # -------------------------------------------
 
-st.markdown("### 📘 Interpretation of the Bell Curve")
+st.markdown("### 📊 Quant Summary (Auto-Generated Insights)")
 
-explanation = f"""
-The chart above shows the **distribution of daily returns** for **{ticker}**, based on
-its historical price data.
+# Annualize volatility (typical for daily data)
+trading_days = 252
+annual_vol = sigma * np.sqrt(trading_days)
+annual_mean = (1 + mu) ** trading_days - 1
 
-Here’s what each component means:
+# Downside tail probability
+p_tail_2 = (returns < -0.02).mean() * 100      # probability of a daily loss < -2%
+p_tail_1 = (returns < -0.01).mean() * 100      # probability of a daily loss < -1%
+p_big_up  = (returns > 0.02).mean() * 100      # probability of a daily gain > +2%
 
-### **🔹 1. Histogram (blue bars)**
-This represents how often certain daily returns occurred.
+summary_text = f"""
+> **Here’s what the return distribution tells us about `{ticker}` from a quantitative risk and behavior perspective:**  
 
-- Taller bars = that return range occurred more often  
-- Wider spread = more volatility  
-- Narrow spread = more stable price movements  
+### **📌 Return Behavior**
+- Average daily return is **{mu*100:.3f}%**, which annualizes to **{annual_mean*100:.2f}%**.
+- Median return is **{median*100:.3f}%**, showing that typical days are {'stronger' if median>mu else 'weaker'} than the mean.
 
-This histogram is normalized into a **probability density**, meaning the total area = 1.
+### **📌 Volatility & Risk**
+- Daily volatility is **{sigma*100:.3f}%**, which annualizes to **{annual_vol*100:.2f}%**.
+- This places **{ticker}** in the category of {"high" if annual_vol>0.25 else "moderate" if annual_vol>0.10 else "low"} volatility assets.
 
----
+### **📌 Tail Risk**
+- Probability of a daily drop worse than **–2%**: **{p_tail_2:.2f}%**
+- Probability of a daily drop worse than **–1%**: **{p_tail_1:.2f}%**
+- Probability of a daily gain above **+2%**: **{p_big_up:.2f}%**
 
-### **🔹 2. KDE Curve (purple smooth line)**
-This is a smoothed estimate of the return distribution.
+{"This distribution has *fat negative tails*, meaning large downside shocks occur more frequently than a normal model would predict."
+ if kurt_val > 0 and skew_val < 0 else
+"This distribution is relatively symmetric, with limited extreme downside tail events."
+ if kurt_val < 0.5 and abs(skew_val) < 0.1 else
+"This asset shows occasional extreme moves, but not pathologically so."
+}
 
-It helps reveal the **true shape** of the distribution:
-- Fat tails
-- Skewness (asymmetry)
-- Sharp or wide peaks
+### **📌 Skewness & Crash Risk**
+- Skewness is **{skew_val:.3f}**, indicating:
+  - {"Upside spikes dominate (positive skew)." if skew_val>0 else
+     "Downside crashes dominate (negative skew)." if skew_val<0 else
+     "Returns are symmetric."}
 
-KDE is often preferred by quants because it doesn’t assume normality.
+### **📌 Kurtosis (Fat Tails)**
+- Kurtosis is **{kurt_val:.3f}**  
+  - Values > 0 mean **fat tails** → extreme moves happen more often than a normal model suggests.
+  - Values < 0 mean light tails → fewer extreme moves.
 
----
+### **🎯 Overall Quant Rating**
+- **Return Quality:** {"Strong" if mu>0 else "Weak"}
+- **Volatility:** {"High" if annual_vol>0.25 else "Moderate" if annual_vol>0.10 else "Low"}
+- **Tail Risk:** {"Elevated" if kurt_val>0 else "Normal"}
+- **Crash Profile:** {"Crash-prone (negative skew)" if skew_val<0 else "Upside biased (positive skew)"}
 
-### **🔹 3. Normal Distribution Curve (red dashed line)**
-This curve represents what the returns **would look like** *if* they were perfectly normal
-(bell-shaped) with the same mean and standard deviation.
-
-Comparing the blue histogram and purple KDE curve to the red normal curve shows:
-- Whether volatility is higher than expected  
-- Whether extreme events occur more often (fat tails)  
-- Whether returns are symmetric or skewed  
-
----
-
-### **🔹 4. Mean Line (green dashed) — {mu*100:.3f}%**
-This is the **average daily return**.
-
-A positive mean indicates long-term upward drift.
-A negative mean indicates long-term decay.
-
----
-
-### **🔹 5. Median Line (orange dotted) — {median*100:.3f}%**
-The middle value of all daily returns.
-
-If mean ≠ median, the distribution is skewed.
-
----
-
-### **🔹 6. ±1σ Region (mint shaded) — ±{sigma*100:.3f}%**
-This shows the range in which **68% of daily returns would fall** *if* returns were normal.
-
-Comparing this shaded region to actual data helps you understand:
-- Whether gold/HHIS has fatter tails  
-- Whether risk is higher than normal  
-- Whether volatility is unusual  
-
----
-
-### **🔹 7. Skewness — {skew_val:.3f}**
-- Positive skew → big upside spikes
-- Negative skew → big downside crashes  
-- Near zero → symmetric distribution  
-
-Most financial assets are **negatively skewed** (crashes are worse than euphoria).
-
----
-
-### **🔹 8. Kurtosis — {kurt_val:.3f}**
-- Above 0 = **fat tails** (extreme events more likely than normal distribution)
-- Below 0 = light tails  
-- Exactly 0 = perfect normal distribution  
-
-Fat tails are common in:
-- equities  
-- commodities  
-- crypto  
-- FX  
-
-and are important for risk management.
-
----
-
-### **📊 Summary**
-This bell curve lets you quickly see whether **{ticker}** behaves normally, trends,
-crashes often, or has unusual volatility patterns.  
-It’s a core quant tool for understanding an asset’s risk profile.
+Together, these metrics suggest that **{ticker}** behaves like a(n) **{"trend-following, high-volatility asset" if annual_vol>0.2 else "stable, low-volatility asset"}** with **{"fat-tailed downside risk" if skew_val<0 and kurt_val>0 else "balanced risk distribution"}**.
 """
 
-st.markdown(explanation)
+st.markdown(summary_text)
