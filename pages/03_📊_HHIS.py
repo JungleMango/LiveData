@@ -44,7 +44,7 @@ st.dataframe(Ticker_Price_log, hide_index=True)
     # BELL CURVE #
 #----------------------------#
 
-st.subheader("Bell Curve of Daily Returns")
+st.subheader("📈 Bell Curve of Daily Returns")
 
 if returns.empty:
     st.warning("Not enough data to compute returns.")
@@ -52,17 +52,44 @@ else:
     fig, ax = plt.subplots()
 
     # Histogram of returns (this is your bell curve)
-    ax.hist(returns, bins=50, density=True)  # density=True → area = 1
+    # density=True → area under all bars = 1 (probability density)
+    n, bins, patches = ax.hist(returns, bins=50, density=True)
 
-    # Optional: overlay a normal distribution for comparison
-    mu = returns.mean()
-    sigma = returns.std()
-    x = np.linspace(returns.min(), returns.max(), 200)
-    normal_pdf = 1 / (sigma * np.sqrt(2 * np.pi)) * np.exp(-0.5 * ((x - mu) / sigma) ** 2)
-    ax.plot(x, normal_pdf)
+    # Basic stats
+    mu = returns.mean()        # mean (decimal)
+    sigma = returns.std()      # standard deviation (decimal)
+    median = returns.median()  # median (decimal)
 
+    # Normal distribution overlay with same mean & std
+    x = np.linspace(returns.min(), returns.max(), 400)
+    normal_pdf = (
+        1 / (sigma * np.sqrt(2 * np.pi))
+        * np.exp(-0.5 * ((x - mu) / sigma) ** 2)
+    )
+    ax.plot(x, normal_pdf, linewidth=2, label="Normal PDF")
+
+    # Vertical lines: mean & median
+    ax.axvline(mu, linestyle="--", linewidth=2, label=f"Mean ({mu*100:.2f}%)")
+    ax.axvline(median, linestyle=":", linewidth=2, label=f"Median ({median*100:.2f}%)")
+
+    # Shade ±1 standard deviation region under the normal curve
+    ax.fill_between(
+        x,
+        0,
+        normal_pdf,
+        where=(x >= mu - sigma) & (x <= mu + sigma),
+        alpha=0.2,
+        label="±1σ region",
+    )
+
+    # Labels & formatting
+    ax.set_title(f"Distribution of Daily Returns — {ticker}")
     ax.set_xlabel("Daily return")
     ax.set_ylabel("Density")
-    ax.set_title(f"Distribution of Daily Returns for {ticker}")
+
+    # Show x-axis as percentages (0.01 → 1%)
+    ax.xaxis.set_major_formatter(mtick.PercentFormatter(1.0))
+
+    ax.legend()
 
     st.pyplot(fig)
