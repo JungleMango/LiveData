@@ -80,8 +80,6 @@ returns_pct = returns * 100
 st.write("Columns:", Ticker_Price_log.columns.tolist())
 
 
-st.dataframe(Ticker_Price_log, hide_index=False)
-
 divider()
 
 
@@ -92,7 +90,7 @@ divider()
 st.subheader("📈 Historical + Projected Growth for " + ticker)
 
 # Ensure proper types
-Ticker_Price_log["date"] = pd.to_datetime(Ticker_Price_log["date"])
+
 Ticker_Price_log = Ticker_Price_log.sort_values("date")
 
 # --- User controls ---
