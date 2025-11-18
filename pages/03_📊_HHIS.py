@@ -498,6 +498,7 @@ divider()
 # 📊 What if ?
 # -------------------------------------------
 
+st.write("Columns:", Ticker_Price_log.columns.tolist())
 
 st.subheader("📈 Historical + Projected Growth for " + ticker)
 
