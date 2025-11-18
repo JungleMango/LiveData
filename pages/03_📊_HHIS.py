@@ -292,7 +292,7 @@ else:
         use_container_width=True
     )
 
-
+divider()
 # ------------------------------------------------
 # Monte Carlo
 # ------------------------------------------------
@@ -357,6 +357,40 @@ else:
         f"there is about a 90% chance the total return falls between roughly **{p05:.1f}%** and **{p95:.1f}%**."
     )
 
+divider()
+
+# ------------------------------------------------
+# Parametric Price Range (Normal Approximation)
+# # ------------------------------------------------
+
+st.subheader("📐 Parametric Price Range (Normal Approximation)")
+
+if returns.empty:
+    st.warning("Not enough data to build a parametric model.")
+else:
+    horiz_param = st.slider("Horizon for parametric estimate (days)", min_value=5, max_value=252, value=21, step=1)
+
+    mean_h = mu * horiz_param
+    std_h = sigma * np.sqrt(horiz_param)
+
+    # 95% normal interval for cumulative return
+    lower_ret = mean_h - 1.96 * std_h
+    upper_ret = mean_h + 1.96 * std_h
+
+    lower_price = last_price * (1 + lower_ret)
+    median_price = last_price * (1 + mean_h)
+    upper_price = last_price * (1 + upper_ret)
+
+    c1, c2, c3 = st.columns(3)
+    c1.metric(f"{horiz_param}-day 95% Lower Price", f"{lower_price:,.2f}")
+    c2.metric(f"{horiz_param}-day Median Price", f"{median_price:,.2f}")
+    c3.metric(f"{horiz_param}-day 95% Upper Price", f"{upper_price:,.2f}")
+
+    st.markdown(
+        f"Using a **normal approximation** for daily returns with mean **{mu*100:.3f}%** "
+        f"and daily volatility **{sigma*100:.3f}%**, we estimate a 95% confidence band "
+        f"for the **{horiz_param}-day** price based on the historical distribution."
+    )
 
 
 # ------------------------------------------------
