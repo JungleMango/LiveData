@@ -27,12 +27,12 @@ def divider():
 
 
 @st.cache_data(ttl=15)
-def fetch_live_prices(tickers: list[str]) -> pd.DataFrame:
+def fetch_live_prices(tickers):
     """
     Fetch live quotes for a list of tickers from FMP.
     Returns a DataFrame indexed by symbol.
     """
-    tickers = [t.strip().upper() for t in tickers if t.strip()]
+    tickers = [str(t).strip().upper() for t in tickers if str(t).strip()]
     if not tickers:
         return pd.DataFrame()
 
@@ -46,7 +46,7 @@ def fetch_live_prices(tickers: list[str]) -> pd.DataFrame:
 
         data = resp.json()
 
-        # FMP returns either a list or a dict with 'data'
+        # FMP returns a list for /quote
         if isinstance(data, dict) and "data" in data:
             data = data["data"]
 
@@ -54,8 +54,6 @@ def fetch_live_prices(tickers: list[str]) -> pd.DataFrame:
         if df.empty:
             return df
 
-        # Normalize column names a bit
-        # Expecting at least: symbol, price, change, changesPercentage, etc.
         if "symbol" not in df.columns:
             return pd.DataFrame()
 
@@ -76,23 +74,18 @@ st.subheader("📋 Your Positions")
 
 # Initialize portfolio in session_state
 if "portfolio_df" not in st.session_state:
-    # Example starter row – you can clear or change this
     st.session_state["portfolio_df"] = pd.DataFrame(
         [
             {"Ticker": "XAUUSD", "Shares": 1.0, "Avg Cost": 4000.0},
         ]
     )
 
+# Use a minimal data_editor without column_config (more compatible)
 portfolio_df = st.data_editor(
     st.session_state["portfolio_df"],
     num_rows="dynamic",
     use_container_width=True,
     key="portfolio_editor",
-    columns={
-        "Ticker": st.column_config.TextColumn("Ticker", help="e.g. XAUUSD, AAPL, HHIS.TO"),
-        "Shares": st.column_config.NumberColumn("Shares", min_value=0.0, step=1.0),
-        "Avg Cost": st.column_config.NumberColumn("Average Cost ($)", min_value=0.0, step=0.01),
-    },
 )
 
 # Save back to session_state
@@ -106,13 +99,13 @@ divider()
 
 st.subheader("💹 Live Prices & P/L")
 
-if portfolio_df.empty or portfolio_df["Ticker"].fillna("").str.strip().eq("").all():
+if portfolio_df.empty or portfolio_df["Ticker"].fillna("").astype(str).str.strip().eq("").all():
     st.info("Add at least one row with a ticker, shares, and avg cost to see portfolio metrics.")
     st.stop()
 
 # Clean tickers
 portfolio_df = portfolio_df.copy()
-portfolio_df["Ticker"] = portfolio_df["Ticker"].fillna("").str.upper().str.strip()
+portfolio_df["Ticker"] = portfolio_df["Ticker"].fillna("").astype(str).str.upper().str.strip()
 portfolio_df = portfolio_df[portfolio_df["Ticker"] != ""]
 
 if portfolio_df.empty:
@@ -136,13 +129,17 @@ merged = portfolio_df.merge(
     how="left",
 )
 
-# Some FMP responses use 'price', some 'currentPrice', etc.
+# Resolve current price
 if "price" in merged.columns:
     merged["Current Price"] = merged["price"]
 elif "currentPrice" in merged.columns:
     merged["Current Price"] = merged["currentPrice"]
 else:
     merged["Current Price"] = np.nan
+
+# Numeric safety
+merged["Shares"] = pd.to_numeric(merged["Shares"], errors="coerce").fillna(0.0)
+merged["Avg Cost"] = pd.to_numeric(merged["Avg Cost"], errors="coerce").fillna(0.0)
 
 # Calculate metrics
 merged["Position Value"] = merged["Shares"] * merged["Current Price"]
@@ -191,14 +188,12 @@ divider()
 
 st.subheader("📊 Portfolio Breakdown")
 
-# Pie/Bar chart by position value
 value_by_ticker = merged.groupby("Ticker")["Position Value"].sum().sort_values(ascending=False)
 
 if not value_by_ticker.empty:
     st.markdown("**Position Value by Ticker**")
     st.bar_chart(value_by_ticker)
 
-# Optional: P/L bar chart
 pl_by_ticker = merged.groupby("Ticker")["P/L $"].sum().sort_values()
 
 if not pl_by_ticker.empty:
