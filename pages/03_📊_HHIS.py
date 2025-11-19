@@ -34,88 +34,29 @@ def divider():
     )
 
 
+@st.cache_data(ttl=10000)
+def fetch_histo_quotes(ticker: str, from_date: date, to_date: date):
+    # Convert date objects to YYYY-MM-DD strings
+    from_str = from_date.isoformat()
+    to_str = to_date.isoformat()
 
-@st.cache_data(ttl=60000)
-def fetch_histo_quotes(ticker: str, from_date, to_date) -> pd.DataFrame:
-    """
-    Fetch historical EOD prices for a ticker between from_date and to_date.
-    Returns a cleaned DataFrame indexed by date, or empty df on failure.
-    """
-    if not ticker:
-        return pd.DataFrame()
-
-
-    url = (
+    historical_quotes_url = (
         f"{base_url}/stable/historical-price-eod/full"
-        f"?symbol={ticker}"
-        f"&from={from_date}"
-        f"&to={to_date}"
-        f"&apikey={api_key}"
+        f"?symbol={ticker}&from={from_str}&to={to_str}&apikey={api_key}"
     )
 
-    try:
-        resp = requests.get(url, timeout=15)
-
-        # If API failed (non-200), just return empty df
-        if resp.status_code != 200:
-            return pd.DataFrame()
-
-        data = resp.json()
-
-        # Handle common FMP shapes
-        if isinstance(data, dict) and "historical" in data:
-            rows = data["historical"]
-        elif isinstance(data, list):
-            rows = data
-        else:
-            rows = []
-
-        df = pd.DataFrame(rows)
-
-        if df.empty:
-            return df
-
-        # Normalize date handling
-        if "date" in df.columns:
-            df["date"] = pd.to_datetime(df["date"])
-            df = df.set_index("date").sort_index()
-        else:
-            # if API already used date as index
-            df.index = pd.to_datetime(df.index)
-            df = df.sort_index()
-
-        return df
-
-    except requests.RequestException:
-        # Network/API issue: just return empty
-        return pd.DataFrame()
-    except Exception:
-        # Any unexpected parsing issue
-        return pd.DataFrame()
+    resp = requests.get(historical_quotes_url, timeout=15)
+    resp.raise_for_status()
+    data = resp.json()
+    return data
 
 #----------------------------#
     # EXECUTING FUNCTIONS #
 #----------------------------#
 
 All_Quotes = fetch_histo_quotes(ticker, from_date, to_date)
-
-if All_Quotes.empty:
-    st.warning("Start by entering a ticker.")
-    st.stop()
-
-Ticker_Price_log = All_Quotes.copy()
-
 Ticker_Price_log = pd.DataFrame(All_Quotes)
-# Right after: Ticker_Price_log = <whatever you got from fetch_histo_quotes>
-
-if "date" in Ticker_Price_log.columns:
-    # Case 1: date is a column
-    Ticker_Price_log["date"] = pd.to_datetime(Ticker_Price_log["date"])
-    Ticker_Price_log = Ticker_Price_log.sort_values("date").set_index("date")
-else:
-    # Case 2: date is already the index (your situation)
-    Ticker_Price_log.index = pd.to_datetime(Ticker_Price_log.index)
-    Ticker_Price_log = Ticker_Price_log.sort_index()
+Ticker_Price_log["date"] = pd.to_datetime(Ticker_Price_log["date"])
 Ticker_Price_log = Ticker_Price_log.sort_values("date")
 Ticker_Price_log = Ticker_Price_log.set_index("date")
 
@@ -357,6 +298,8 @@ divider()
 # ------------------------------------------------
 # Monte Carlo
 # ------------------------------------------------
+
+
 
 st.subheader("🔮 Monte Carlo Simulation (Bootstrap from Historical Returns)")
 
