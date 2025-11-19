@@ -106,7 +106,16 @@ if All_Quotes.empty:
 Ticker_Price_log = All_Quotes.copy()
 
 Ticker_Price_log = pd.DataFrame(All_Quotes)
-Ticker_Price_log["date"] = pd.to_datetime(Ticker_Price_log["date"])
+# Right after: Ticker_Price_log = <whatever you got from fetch_histo_quotes>
+
+if "date" in Ticker_Price_log.columns:
+    # Case 1: date is a column
+    Ticker_Price_log["date"] = pd.to_datetime(Ticker_Price_log["date"])
+    Ticker_Price_log = Ticker_Price_log.sort_values("date").set_index("date")
+else:
+    # Case 2: date is already the index (your situation)
+    Ticker_Price_log.index = pd.to_datetime(Ticker_Price_log.index)
+    Ticker_Price_log = Ticker_Price_log.sort_index()
 Ticker_Price_log = Ticker_Price_log.sort_values("date")
 Ticker_Price_log = Ticker_Price_log.set_index("date")
 
