@@ -539,12 +539,15 @@ with col_ctrl2:
         help="Forward-looking dividend yield for the projection."
     )
 
-years_ahead = st.slider(
-    "Projection horizon (years)",
+projection_months = st.slider(
+    "Projection horizon (months)",
     min_value=1,
-    max_value=30,
-    value=10
+    max_value=600,       # up to 50 years
+    value=120,           # default 10 years
+    step=1
 )
+
+periods = projection_months
 
 monthly_contribution = st.number_input(
     "Monthly contribution ($, during projection period)",
@@ -660,17 +663,17 @@ else:
             f"""
 - Initial lump-sum investment: **${initial_invest:,.2f}**
 - Historical period: **{hist.index[0].date()} → {hist.index[-1].date()}**
-- Projection horizon: **{years_ahead} years**
+- Projection horizon: **{projection_months} years**
 - Monthly contribution during projection: **${monthly_contribution:,.2f}**
 - Total contributions over projection: **${total_contribs:,.2f}**
 - Assumed annual price growth: **{annual_price_growth:.2f}%**
 - Assumed annual dividend yield: **{annual_div_yield:.2f}%**
 
 **If dividends are reinvested**:
-- Projected portfolio value after {years_ahead} years: **${final_reinvest:,.2f}**
+f"Projected portfolio value after {projection_months} months:"
 
 **If dividends are taken as cash**:
-- Projected portfolio (price only) after {years_ahead} years: **${final_no:,.2f}**
+- Projected portfolio (price only) after {projection_months} years: **${final_no:,.2f}**
 - Total dividends collected in cash over projection: **${final_cash:,.2f}**
 """
         )
