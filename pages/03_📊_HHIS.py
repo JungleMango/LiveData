@@ -100,7 +100,7 @@ def fetch_histo_quotes(ticker: str, from_date, to_date) -> pd.DataFrame:
 All_Quotes = fetch_histo_quotes(ticker, from_date, to_date)
 
 if All_Quotes.empty:
-    st.warning("Could not load data for this ticker and date range. Check the symbol or API limits.")
+    st.warning("Start by entering a ticker.")
     st.stop()
 
 Ticker_Price_log = All_Quotes.copy()
