@@ -89,17 +89,25 @@ def fetch_histo_quotes(ticker: str, from_date: date, to_date: date):
     # EXECUTING FUNCTIONS #
 #----------------------------#
 
+
+# 1️⃣ Don't call the API until we have a ticker
+if not ticker:
+    st.info("Please enter a ticker to load historical data.")
+    st.stop()
+
+# 2️⃣ Fetch data safely
 All_Quotes = fetch_histo_quotes(ticker, from_date, to_date)
+
 if All_Quotes.empty:
     st.warning("Could not load data for this ticker and date range. Check the symbol or API limits.")
     st.stop()
-Ticker_Price_log = pd.DataFrame(All_Quotes)
-Ticker_Price_log["date"] = pd.to_datetime(Ticker_Price_log["date"])
-Ticker_Price_log = Ticker_Price_log.sort_values("date")
-Ticker_Price_log = Ticker_Price_log.set_index("date")
 
+# 3️⃣ Use the result directly — it's already indexed by date in fetch_histo_quotes
+Ticker_Price_log = All_Quotes.copy()
 
-
+# Ensure index is datetime and sorted (idempotent / safe)
+Ticker_Price_log.index = pd.to_datetime(Ticker_Price_log.index)
+Ticker_Price_log = Ticker_Price_log.sort_index()
 if not ticker:
     st.info("Please enter a ticker.")
 else:
