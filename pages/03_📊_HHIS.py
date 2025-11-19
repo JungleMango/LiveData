@@ -579,7 +579,7 @@ else:
 
         # --- Future projection (constant growth model + contributions) ---
 
-        periods = years_ahead * 12
+        periods = projection_months * 12
         last_hist_date = hist.index[-1]
         future_dates = pd.date_range(
             last_hist_date + pd.Timedelta(days=1),
@@ -663,7 +663,7 @@ else:
             f"""
 - Initial lump-sum investment: **${initial_invest:,.2f}**
 - Historical period: **{hist.index[0].date()} → {hist.index[-1].date()}**
-- Projection horizon: **{projection_months} years**
+- Projection horizon: **{projection_months} months **
 - Monthly contribution during projection: **${monthly_contribution:,.2f}**
 - Total contributions over projection: **${total_contribs:,.2f}**
 - Assumed annual price growth: **{annual_price_growth:.2f}%**
@@ -673,7 +673,7 @@ else:
 f"Projected portfolio value after {projection_months} months:"
 
 **If dividends are taken as cash**:
-- Projected portfolio (price only) after {projection_months} years: **${final_no:,.2f}**
+- Projected portfolio (price only) after {projection_months} months: **${final_no:,.2f}**
 - Total dividends collected in cash over projection: **${final_cash:,.2f}**
 """
         )
