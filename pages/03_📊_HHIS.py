@@ -45,11 +45,46 @@ def fetch_histo_quotes(ticker: str, from_date: date, to_date: date):
         f"?symbol={ticker}&from={from_str}&to={to_str}&apikey={api_key}"
     )
 
-    resp = requests.get(historical_quotes_url, timeout=15)
-    resp.raise_for_status()
-    data = resp.json()
-    return data
 
+    try:
+        resp = requests.get(historical_quotes_url, timeout=15)
+
+        # If API failed (non-200), just return empty df
+        if resp.status_code != 200:
+            return pd.DataFrame()
+
+        data = resp.json()
+
+        # Handle common FMP shapes
+        if isinstance(data, dict) and "historical" in data:
+            rows = data["historical"]
+        elif isinstance(data, list):
+            rows = data
+        else:
+            rows = []
+
+        df = pd.DataFrame(rows)
+
+        if df.empty:
+            return df
+
+        # Normalize date handling
+        if "date" in df.columns:
+            df["date"] = pd.to_datetime(df["date"])
+            df = df.set_index("date").sort_index()
+        else:
+            # if API already used date as index
+            df.index = pd.to_datetime(df.index)
+            df = df.sort_index()
+
+        return df
+
+    except requests.RequestException:
+        # Network/API issue: just return empty
+        return pd.DataFrame()
+    except Exception:
+        # Any unexpected parsing issue
+        return pd.DataFrame()
 #----------------------------#
     # EXECUTING FUNCTIONS #
 #----------------------------#
